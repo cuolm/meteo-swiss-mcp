@@ -1,0 +1,22 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        }
+    },
+    "handlers": {
+        "stdout": {
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+            "stream": "ext://sys.stderr"
+        }
+    },
+    "root": {
+        "handlers": ["stdout"],
+        "level": "INFO",
+        "propagate": true
+    }
+}

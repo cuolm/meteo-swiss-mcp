@@ -1,0 +1,29 @@
+# Python
+**/__pycache__/
+**/.pytest_cache/
+*.py[cod]
+*.pyo
+
+# Virtual environments and environment files
+.env
+.venv/
+venv/
+env/
+
+# Logs and cache
+*.log
+EarthKitCache/
+**/nominatim_geocode_cache.json
+
+
+# Test output 
+.tox/
+.pytest_cache/
+
+# macOS system files
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+

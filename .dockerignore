@@ -1,0 +1,37 @@
+# Exclude Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Exclude virtual environment and environment files
+.env
+.venv/
+env/
+venv/
+
+# Exclude version control files and folders
+.git/
+.gitignore
+
+# Exclude logs and cache folders
+EarthKitCache/
+*.log
+
+# Exclude test folders
+tests/
+
+# Exclude docs folder as not needed inside container
+docs/
+
+# Exclude Python packaging/build artifacts
+*.egg-info/
+build/
+dist/
+
+# Editor/IDE configs
+.vscode/
+.idea/
+
+# Exclude Dockerfile and dockerignore file itself
+Dockerfile
+.dockerignore
