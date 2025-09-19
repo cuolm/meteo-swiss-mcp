@@ -3,15 +3,15 @@
 ![MCP](https://img.shields.io/badge/mcp-1.13.1-brightgreen)  
 ![License](https://img.shields.io/badge/license-Apache%202.0-yellow) 
 
-A **Model Context Protocol ([MCP](https://modelcontextprotocol.info/))** server that exposes Swiss weather forecast data (MeteoSwiss) as callable tools.   
+A **Model Context Protocol ([MCP](https://modelcontextprotocol.info/))** server that exposes Swiss weather forecast data callable tools.   
 It fetches data from the official [MeteoSwiss](https://opendatadocs.meteoswiss.ch/e-forecast-data/e2-e3-numerical-weather-forecasting-model) [meteodata-lab](https://meteoswiss.github.io/meteodata-lab/), caches it locally, and serves predictions such as rainfall, sunshine, temperature, etc. The prediction data is from the [ICON-CH2-EPS](https://www.meteoswiss.admin.ch/weather/warning-and-forecasting-systems/icon-forecasting-systems.html) forecast system that produces data for up to 5 days ahead. 
 
 Additionally there is also a MCP client that can be run to test the server using the stdio transport.
 
-> **Note:**  
-> This project is **not an official MeteoSwiss product**.  
-> All forecast data are from the [MeteoSwiss Open Data](https://opendata.swiss/en/organization/bundesamt-fur-meteorologie-und-klimatologie-meteoschweiz) portal.  
-> **Source: MeteoSwiss**
+**Note:**  
+This project is **not an official MeteoSwiss product**.  
+All forecast data are from the [MeteoSwiss Open Data](https://opendata.swiss/en/organization/bundesamt-fur-meteorologie-und-klimatologie-meteoschweiz) portal.  
+**Source: MeteoSwiss**
 
 ## 📦 Installation
 
@@ -28,15 +28,15 @@ source .venv/bin/activate   # Windows: .\.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-> **Note:**  
-> [Ollama](https://ollama.com/) is optional – only needed if you want to use the MCP client `meteo_swiss_mcp_client.py`.  
-> The server uses a cache (`cache/EarthKitCache`) to avoid re‑downloading weather data. Clear it with `rm -rf cache/EarthKitCache` if needed.   
-> The server uses a cache (`cache/nominatim_geocode_cache.json`) for lat/lng lookups. Clear it with `rm -rf cache/nominatim_geocode_cache.json` if needed.  
+**Note:** 
+- [Ollama](https://ollama.com/) is optional – only needed if you want to use the MCP client `meteo_swiss_mcp_client.py`.  
+- The server uses a cache (`cache/EarthKitCache`) to avoid re‑downloading weather data. Clear it with `rm -rf cache/EarthKitCache` if needed.   
+- The server uses a cache (`cache/nominatim_geocode_cache.json`) for lat/lon lookups. Clear it with `rm -rf cache/nominatim_geocode_cache.json` if needed.  
 
 
 ## ⚙️ Server Configuration
 
-Create a `.env` file at the root directory and specify a HTTP header that tells Nominatim who makes that call. 
+Create a `.env` file in the root directory and specify an environment variable that tells Nominatim (the geocoding service) who is making the call.
 
 ```bash
 echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
@@ -59,7 +59,7 @@ Optional flags: `--help`
 
 Run the MCP server in Docker with these steps:
 
-1. Create a `.env` file in the project root containing your Nominatim user agent (Replace `"YourWeatherMCPServer/1.0 (yourname@example.com)"`):
+1. Create a `.env` file in the project root containing your Nominatim user agent environment variable (replace `"YourWeatherMCPServer/1.0 (yourname@example.com)"`):
 ```bash
    echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
 ```
@@ -80,6 +80,7 @@ This runs the MCP server isolated with all dependencies and environment variable
 ## 🖥️ Running the MCP Client using Stdio Transport
 
 The MCP client `src/meteo_swiss_mcp_client.py` can be used to test the server over the stdio transport.
+Make sure Ollama is installed on your system. You can [download it here](https://ollama.com/download) or install via Homebrew on macOS: `brew install ollama`
 
 ```bash
 # Pull a local Ollama LLM model (e.g. qwen3:4b)
@@ -93,7 +94,7 @@ python src/meteo_swiss_mcp_client.py --model=qwen3:4b --server-script=src/meteo_
 
 | Tool | Purpose | Example Call |
 |------|---------|--------------|
-| `current_date_and_time()` | Current date and time (weekday day.month.year hour:minute:second) | `current_date_and_time()` |
+| `current_date_and_time()` | Current date and time (weekday day.month.year hour:minute:second) in Swiss local time | `current_date_and_time()` |
 | `total_rainfall(location, lead_time_start_swiss, lead_time_end_swiss)` | Total rainfall (mm) for a period | `total_rainfall("Zurich", 24, 48)` |
 | `sunshine_hours(location, lead_time_start_swiss, lead_time_end_swiss)` | Sunshine hours for a period | `sunshine_hours("Zurich", 24, 48)` |
 | `temperature(location, lead_time_swiss)` | Max temperature (°C) at a specific lead time | `temperature("Zurich", 36)` |
@@ -102,10 +103,10 @@ python src/meteo_swiss_mcp_client.py --model=qwen3:4b --server-script=src/meteo_
 | `total_cloud_cover(location, lead_time_swiss)` | Cloud cover (%) at a specific lead time | `total_cloud_cover("Zurich", 36)` |
 | `snow_depth(location, lead_time_swiss)` | Snow depth (m) at a specific lead time | `snow_depth("Zurich", 36)` |
 | `precipitation_rate(location, lead_time_swiss)` | Precipitation rate (mm/s) at a specific lead time | `precipitation_rate("Zurich", 36)` |
-> **Lead Time**  
-> Lead time is defined as the number of hours counted from Swiss local time 00:00, which is then internally converted to UTC (the ICON-CH2-EPS forecast system uses UTC).  
-> Example: If you request a lead time of 36 hours, you will receive the forecast for 12:00 Swiss local time tomorrow.  
-> Minimum lead time: 2 hours; maximum lead time: 121 hours.  
+**Lead Time**
+- Lead time is the number of hours counted from Swiss local time 00:00, internally converted to UTC (the ICON-CH2-EPS forecast system uses UTC).  
+- Example: A lead time of 36 hours returns the forecast for 12:00 Swiss local time tomorrow.  
+- Minimum lead time: 2 hours; maximum lead time: 121 hours.
 
 
 ## 📂 Project Structure
@@ -136,7 +137,7 @@ Configure the mcp.json file in [LMStudio](https://lmstudio.ai/):
   }
 }
 ```
-Run the MCP server with the streamable-http transport layer 
+Run the MCP server with the streamable-http transport layer: 
 ```bash
 # Make sure the virtual environment is activated 
 source .venv/bin/activate
@@ -144,9 +145,7 @@ source .venv/bin/activate
 python src/meteo_swiss_mcp_server.py --transport=streamable-http --host=localhost --port=8050
 ```
 ### Using the stdio transport layer
-Configure the mcp.json file in LMStudio:
->**Note:**
-> Replace `<path-to-the-project>` with your actual local path.
+Configure the mcp.json file in LMStudio. Replace `<path-to-the-project>` with your actual local path:
 ```json
 {
   "mcpServers": {
