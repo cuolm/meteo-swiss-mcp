@@ -164,8 +164,10 @@ async def main():
     await client.connect_to_server()
     try:
         logger.info(f"MCP Client started!")
+        loop = asyncio.get_running_loop()
         while True:
-            query = input("\nType your question (or '/bye' to quit): ").strip()
+            query = await loop.run_in_executor(None, input, "\nType your question (or '/bye' to quit): ")
+            query = query.strip()
             if query.lower() == "/bye":
                 logger.info(f"Goodbye!")
                 break
