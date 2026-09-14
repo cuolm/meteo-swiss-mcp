@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from ollama import AsyncClient
+from ollama import AsyncClient, ChatResponse
 
 from . import setup_logging
 
@@ -52,6 +52,7 @@ class MCPClient:
         self.exit_stack = AsyncExitStack()
         self.ollama_client = AsyncClient()
         self.model = model
+        self.messages: List[Dict[str, Any]] = []
         self.stdio: Optional[Any] = None
         self.write: Optional[Any] = None
 
@@ -103,45 +104,52 @@ class MCPClient:
             logger.error(f"Tool {tool_name} failed: {e}")
             return f"Error calling tool {tool_name}: {str(e)}"
 
+    def _format_assistant_message(self, response: ChatResponse) -> Dict[str, Any]:
+        """
+        Standardizes assistant messages into a clean dictionary format.
+        Preserves tool_calls while removing internal metadata (images, thinking, etc).
+        """
+        message = response.message
+        formatted_message = {
+            "role": "assistant",
+            "content": message.content or ""
+        }
+
+        # If the model wants to use tools, add them to the dictionary
+        if message.tool_calls:
+            formatted_message["tool_calls"] = [
+                {
+                    "function": {
+                        "name": call.function.name,
+                        "arguments": call.function.arguments,
+                    }
+                }
+                for call in message.tool_calls
+            ]
+
+        return formatted_message
+
     async def process_query(self, query: str) -> str:
+        self.messages.append({"role": "user", "content": query})
         tools = await self.get_mcp_tools()
 
-        response = await self.ollama_client.chat(
-            model=self.model,
-            messages=[{"role": "user", "content": query}],
-            tools=tools,
-        )
+        while True:
+            response = await self.ollama_client.chat(model=self.model, messages=self.messages, tools=tools)
+            assistant_message = self._format_assistant_message(response)
+            self.messages.append(assistant_message)
 
-        # Get assistant's response
-        assistant_message = response.message
+            # If no tools were requested, we have the final answer
+            if not response.message.tool_calls:
+                return response.message.content
 
-        # Initialize conversation with user query and assistant response
-        messages = [
-            {"role": "user", "content": query},
-            {"role": "assistant", "content": assistant_message.content}
-        ]
-
-        # Handle tool calls if present
-        if assistant_message.tool_calls:
             # Process each tool call
-            for tool_call in assistant_message.tool_calls:
-                # Execute tool call
+            for tool_call in response.message.tool_calls:
                 tool_call_response = await self.call_tool(tool_call.function.name, tool_call.function.arguments)
-
-                # Add tool response to conversation
-                messages.append({ "role": "tool", "content": tool_call_response.content[0].text})
-
-            # Get final response using information from tools
-            final_response = await self.ollama_client.chat(
-                model=self.model,
-                messages=messages,
-                tools=tools
-            )
-
-            return final_response.message.content
-
-        # No tool calls, just return the direct response
-        return assistant_message.content
+                self.messages.append({
+                    "role": "tool",
+                    "name": tool_call.function.name,
+                    "content": tool_call_response.content[0].text,
+                })
 
     async def cleanup(self):
         await self.exit_stack.aclose()
