@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -24,9 +25,10 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def _ensure_ollama() -> None:
+    ollama_base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     try:
         # Ping Ollama API
-        requests.get("http://localhost:11434/api/tags", timeout=1)
+        requests.get(f"{ollama_base_url}/api/tags", timeout=1)
         logger.info("Ollama running.")
     except Exception:
         logger.info("Starting Ollama server...")
@@ -39,8 +41,8 @@ def _ensure_ollama() -> None:
         # Wait until server is ready
         for _ in range(20):
             try:
-                requests.get("http://localhost:11434/api/tags", timeout=1)
-                print("Ollama started.")
+                requests.get(f"{ollama_base_url}/api/tags", timeout=1)
+                logger.info("Ollama started.")
                 return
             except Exception:
                 time.sleep(0.5)
