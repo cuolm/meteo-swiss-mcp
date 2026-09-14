@@ -103,6 +103,11 @@ class MeteoSwissMCPServer:
                 total_rainfall("Zurich", 42, 48)   # Total rainfall tomorrow evening
             """
             try:
+                if lead_time_start_swiss >= lead_time_end_swiss:
+                    raise ValueError(
+                        f"lead_time_start_swiss must be less than lead_time_end_swiss, "
+                        f"got lead_time_start_swiss={lead_time_start_swiss}, lead_time_end_swiss={lead_time_end_swiss}"
+                    )
                 lead_time_start_utc = _lead_time_swiss_to_utc(lead_time_start_swiss)
                 lead_time_end_utc = _lead_time_swiss_to_utc(lead_time_end_swiss)
                 result = await self.meteo.total_rainfall_for_location(
@@ -137,6 +142,11 @@ class MeteoSwissMCPServer:
                 sunshine_hours("Zurich", 42, 48)   # Total sunshine hours tomorrow evening
             """
             try:
+                if lead_time_start_swiss >= lead_time_end_swiss:
+                    raise ValueError(
+                        f"lead_time_start_swiss must be less than lead_time_end_swiss, "
+                        f"got lead_time_start_swiss={lead_time_start_swiss}, lead_time_end_swiss={lead_time_end_swiss}"
+                    )
                 lead_time_start_utc = _lead_time_swiss_to_utc(lead_time_start_swiss)
                 lead_time_end_utc = _lead_time_swiss_to_utc(lead_time_end_swiss)
                 result = await self.meteo.sunshine_hours_for_location(
