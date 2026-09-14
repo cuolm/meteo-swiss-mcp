@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
@@ -335,9 +336,15 @@ class MeteoSwissMCPServer:
 
 
 def main():
-    args = _parse_args()
-    server = MeteoSwissMCPServer(args)
-    server.run()
+    try:
+        args = _parse_args()
+        server = MeteoSwissMCPServer(args)
+        server.run()
+    except KeyboardInterrupt:
+        logger.info("Received KeyboardInterrupt, shutting down.")
+    except Exception:
+        logger.exception("Fatal error in MCP server")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
