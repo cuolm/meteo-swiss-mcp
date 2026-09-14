@@ -10,13 +10,10 @@
 venv/
 env/
 
-# Logs and cache
+# Logs
 *.log
-EarthKitCache/
-**/nominatim_geocode_cache.json
 
-
-# Test output 
+# Test output
 .tox/
 .pytest_cache/
 

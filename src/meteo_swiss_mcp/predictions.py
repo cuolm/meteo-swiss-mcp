@@ -11,6 +11,7 @@ import numpy as np
 from dotenv import load_dotenv
 from earthkit.data import settings
 from geopy.geocoders import Nominatim
+from platformdirs import user_cache_path
 from rasterio.crs import CRS
 from xarray import DataArray
 
@@ -27,8 +28,10 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 # Configure caching
+# Shared, OS-standard cache location (survives across working directories the server may be launched from).
+# Override with METEO_SWISS_MCP_CACHE_DIR, e.g. to isolate cache location in tests or Docker.
 # EarthKit cache
-CACHE_DIR = Path(__file__).parent.parent.parent / "cache"
+CACHE_DIR = Path(os.environ.get("METEO_SWISS_MCP_CACHE_DIR", user_cache_path("meteo-swiss-mcp")))
 EARTHKIT_CACHE_DIR = CACHE_DIR / "EarthKitCache"
 settings.set({
     "cache-policy": "user",  # "user" = caches data persistently on disk in the specified directory ("temporary" = not persistent, only RAM)
