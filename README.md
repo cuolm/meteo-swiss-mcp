@@ -1,96 +1,177 @@
-# MeteoSwiss MCP Server  
-![Python >=3.11](https://img.shields.io/badge/python-%3E%3D3.11-blue)
-![MCP](https://img.shields.io/badge/mcp-1.13.1-brightgreen)  
-![License](https://img.shields.io/badge/license-Apache%202.0-yellow) 
+# MeteoSwiss MCP Server
+[![PyPI](https://img.shields.io/pypi/v/meteo-swiss-mcp.svg)](https://pypi.org/project/meteo-swiss-mcp/)
+[![License](https://img.shields.io/github/license/cuolm/meteo-swiss-mcp.svg)](/LICENSE.txt)
+[![Release](https://github.com/cuolm/meteo-swiss-mcp/actions/workflows/release.yaml/badge.svg)](https://github.com/cuolm/meteo-swiss-mcp/actions/workflows/release.yaml)
+[![Tests](https://github.com/cuolm/meteo-swiss-mcp/actions/workflows/tests.yaml/badge.svg)](https://github.com/cuolm/meteo-swiss-mcp/actions/workflows/tests.yaml)
 
-A **Model Context Protocol ([MCP](https://modelcontextprotocol.info/))** server that exposes Swiss weather forecast data callable tools.   
-It fetches data from the official [MeteoSwiss](https://opendatadocs.meteoswiss.ch/e-forecast-data/e2-e3-numerical-weather-forecasting-model) [meteodata-lab](https://meteoswiss.github.io/meteodata-lab/), caches it locally, and serves predictions such as rainfall, sunshine, temperature, etc. The prediction data is from the [ICON-CH2-EPS](https://www.meteoswiss.admin.ch/weather/warning-and-forecasting-systems/icon-forecasting-systems.html) forecast system that produces data for up to 5 days ahead. 
+A **Model Context Protocol ([MCP](https://modelcontextprotocol.info/))** server that exposes Swiss weather forecast data as callable tools.
+It fetches data from the official [MeteoSwiss](https://opendatadocs.meteoswiss.ch/e-forecast-data/e2-e3-numerical-weather-forecasting-model) [meteodata-lab](https://meteoswiss.github.io/meteodata-lab/), caches it locally, and serves predictions such as rainfall, sunshine, temperature, etc. The prediction data is from the [ICON-CH2-EPS](https://www.meteoswiss.admin.ch/weather/warning-and-forecasting-systems/icon-forecasting-systems.html) forecast system that produces data for up to 5 days ahead.
 
-Additionally there is also a MCP client that can be run to test the server using the stdio transport.
+Additionally there is also an MCP client that can be run to test the server using the stdio transport.
 
-**Note:**  
-This project is **not an official MeteoSwiss product**.  
-All forecast data are from the [MeteoSwiss Open Data](https://opendata.swiss/en/organization/bundesamt-fur-meteorologie-und-klimatologie-meteoschweiz) portal.  
+**Note:**
+This project is **not an official MeteoSwiss product**.
+All forecast data are from the [MeteoSwiss Open Data](https://opendata.swiss/en/organization/bundesamt-fur-meteorologie-und-klimatologie-meteoschweiz) portal.
 **Source: MeteoSwiss**
 
-## 📦 Installation
+## Table of Contents
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Available Tools](#available-tools)
+- [Example Usage with LMStudio](#example-usage-with-lmstudio)
+- [Tests](#tests)
+- [Releasing](#releasing)
+- [Resources](#resources)
+- [License](#license)
 
+## Project Structure
+```text
+meteo-swiss-mcp/
+├── src/meteo_swiss_mcp/
+│   ├── server.py           # MCP server
+│   ├── predictions.py      # Data fetching logic
+│   ├── client.py           # MCP client (optional)
+│   └── log_config.json     # Packaged logging configuration
+├── tests/meteo_swiss_mcp/  # Pytest suite
+├── .github/workflows/      # CI and release pipelines
+├── docs/                   # Documentation
+├── pyproject.toml          # Project metadata and dependencies
+├── uv.lock                 # Pinned, reproducible dependency set
+├── .env                    # NOMINATIM_USER_AGENT (not committed)
+└── Dockerfile
+```
+Caches live outside the project, under your OS's standard cache directory (see [Installation](#installation)).
+
+## Quick Start
+
+### 1. Installation
+Install the server globally to run it anywhere on your system:
 ```bash
-# Clone the repo
+uv tool install meteo-swiss-mcp
+```
+
+### 2. Configuration
+Create a `.env` file with your Nominatim user agent (see [Configuration](#configuration)):
+```bash
+echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
+```
+
+### 3. Execution
+Run the server from the directory containing your `.env` file:
+```bash
+meteo-swiss-mcp-server
+```
+
+## Installation
+
+### As a Global CLI Tool
+```bash
+uv tool install meteo-swiss-mcp
+```
+
+### As a Library Dependency
+```bash
+# Using uv
+uv add meteo-swiss-mcp
+
+# Using pip
+pip install meteo-swiss-mcp
+```
+
+> **Note:** Add the `client` extra (`meteo-swiss-mcp[client]`) if you also want the optional MCP client, which pulls in the Ollama SDK.
+
+### From Source
+```bash
 git clone https://github.com/cuolm/meteo-swiss-mcp.git
 cd meteo-swiss-mcp
 
-# Create a virtual environment 
-python -m venv .venv
-source .venv/bin/activate   # Windows: .\.venv\Scripts\activate
+# Using uv (Recommended)
+uv sync
 
-# Install dependencies
-pip install -r requirements.txt
+# Using pip
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e ".[client]"
 ```
 
-**Note:** 
-- [Ollama](https://ollama.com/) is optional – only needed if you want to use the MCP client `meteo_swiss_mcp_client.py`.  
-- The server uses a cache (`cache/EarthKitCache`) to avoid re‑downloading weather data. Clear it with `rm -rf cache/EarthKitCache` if needed.   
-- The server uses a cache (`cache/nominatim_geocode_cache.json`) for lat/lon lookups. Clear it with `rm -rf cache/nominatim_geocode_cache.json` if needed.  
+**Note:**
+- [Ollama](https://ollama.com/) is optional – only needed if you want to use the MCP client (`meteo-swiss-mcp-client`, installed via the `client` extra).
+- The server reads its `.env` file relative to the **current working directory** — run it from the directory that holds your `.env` file (or export the variable directly).
+- Caches are stored under your OS's standard cache directory (via [platformdirs](https://github.com/tox-dev/platformdirs), e.g. `~/Library/Caches/meteo-swiss-mcp` on macOS, `~/.cache/meteo-swiss-mcp` on Linux) — independent of where the server is launched from, so downloaded forecasts and geocoded locations are reused across runs.
+  - `EarthKitCache/` avoids re‑downloading weather data. Delete it to clear.
+  - `nominatim_geocode_cache.json` caches lat/lon lookups. Delete it to clear.
 
+## Configuration
 
-## ⚙️ Server Configuration
-
-Create a `.env` file in the root directory and specify an environment variable that tells Nominatim (the geocoding service) who is making the call.
+Create a `.env` file in the directory you'll run the server from, specifying an environment variable that tells Nominatim (the geocoding service) who is making the call.
 
 ```bash
 echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
 ```
 
+## Usage
 
-## 🚀 Running the Server
-
+### Running the Server
+If installed via `uv tool install` or `pip`:
 ```bash
 # stdio (default)
-python src/meteo_swiss_mcp_server.py
+meteo-swiss-mcp-server
 
 # streamable-http
-python src/meteo_swiss_mcp_server.py --transport=streamable-http --host=localhost --port=8050
+meteo-swiss-mcp-server --transport=streamable-http --host=localhost --port=8050
+```
+
+If running within the source repository cloned from GitHub:
+```bash
+# Using uv (Recommended)
+uv run meteo-swiss-mcp-server
+
+# Using pip, with the virtual environment activated
+meteo-swiss-mcp-server
 ```
 Optional flags: `--help`
 
+### Running the Server with Docker
+Images are built and published automatically by GitHub Actions to the project's [GitHub Container Registry](https://ghcr.io/cuolm/meteo-swiss-mcp), tagged `:latest` (newest release) and by version.
 
-## 🐳 Running the Server with Docker
-
-Run the MCP server in Docker with these steps:
-
-1. Create a `.env` file in the project root containing your Nominatim user agent environment variable (replace `"YourWeatherMCPServer/1.0 (yourname@example.com)"`):
+1. Create a `.env` file containing your Nominatim user agent environment variable (replace `"YourWeatherMCPServer/1.0 (yourname@example.com)"`):
 ```bash
-   echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
+echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
 ```
-2. Build the Docker image from the root folder:
+2. Run the published image, passing the `.env` file and mapping port 8050:
 ```bash
-   docker build -t meteo_swiss_mcp_server .
+docker run --env-file .env -p 8050:8050 ghcr.io/cuolm/meteo-swiss-mcp:latest
 ```
-3. Run the container, passing the `.env` file and mapping port 8050:
+3. Access the server at:
 ```bash
-   docker run --env-file .env -p 8050:8050 meteo_swiss_mcp_server
+http://localhost:8050/mcp/
 ```
-4. Access the server at:
-```bash
-   http://localhost:8050/mcp/
-```
-This runs the MCP server isolated with all dependencies and environment variables preconfigured.
 
-## 🖥️ Running the MCP Client using Stdio Transport
+#### Manual Build
+```bash
+docker build -t meteo-swiss-mcp .
+docker run --env-file .env -p 8050:8050 meteo-swiss-mcp
+```
 
-The MCP client `src/meteo_swiss_mcp_client.py` can be used to test the server over the stdio transport.
+### Running the MCP Client using Stdio Transport
+The bundled MCP client can be used to test the server over the stdio transport. It requires the `client` extra (see [Installation](#installation)).
 Make sure Ollama is installed on your system. You can [download it here](https://ollama.com/download) or install via Homebrew on macOS: `brew install ollama`
 
 ```bash
 # Pull a local Ollama LLM model (e.g. qwen3:4b)
 ollama pull qwen3:4b
 
-# Run the MCP client (the client script will automatically start the server)
-python src/meteo_swiss_mcp_client.py --model=qwen3:4b --server-script=src/meteo_swiss_mcp_server.py
+# Run the MCP client (it automatically starts the server as a subprocess)
+meteo-swiss-mcp-client --model=qwen3:4b
+
+# From a source checkout, using uv
+uv run meteo-swiss-mcp-client --model=qwen3:4b
 ```
 
-## 🔧 Available Tools
+## Available Tools
 
 | Tool | Purpose | Example Call |
 |------|---------|--------------|
@@ -103,31 +184,16 @@ python src/meteo_swiss_mcp_client.py --model=qwen3:4b --server-script=src/meteo_
 | `total_cloud_cover(location, lead_time_swiss)` | Cloud cover (%) at a specific lead time | `total_cloud_cover("Zurich", 36)` |
 | `snow_depth(location, lead_time_swiss)` | Snow depth (m) at a specific lead time | `snow_depth("Zurich", 36)` |
 | `precipitation_rate(location, lead_time_swiss)` | Precipitation rate (mm/s) at a specific lead time | `precipitation_rate("Zurich", 36)` |
+
 **Lead Time**
-- Lead time is the number of hours counted from Swiss local time 00:00, internally converted to UTC (the ICON-CH2-EPS forecast system uses UTC).  
-- Example: A lead time of 36 hours returns the forecast for 12:00 Swiss local time tomorrow.  
+- Lead time is the number of hours counted from Swiss local time 00:00, internally converted to UTC (the ICON-CH2-EPS forecast system uses UTC).
+- Example: A lead time of 36 hours returns the forecast for 12:00 Swiss local time tomorrow.
 - Minimum lead time: 2 hours; maximum lead time: 121 hours.
 
+## Example Usage with LMStudio
 
-## 📂 Project Structure
-
-```
-meteo-swiss-mcp/
-├── src/
-│   ├── meteo_swiss_mcp_server.py   # MCP server
-│   ├── meteo_swiss_predictions.py  # Data fetching logic
-│   └── meteo_swiss_mcp_client.py   # MCP client (optional)
-├── requirements.txt
-├── .env
-│
-├── cache/                           
-├── tests/                           
-├── docs/                           
-└── Dockerfile                           
-```
-## ⚡ Example Usage with LMStudio
 ### Using the streamable-http transport layer
-Configure the mcp.json file in [LMStudio](https://lmstudio.ai/): 
+Configure the mcp.json file in [LMStudio](https://lmstudio.ai/):
 ```json
 {
   "mcpServers": {
@@ -137,45 +203,49 @@ Configure the mcp.json file in [LMStudio](https://lmstudio.ai/):
   }
 }
 ```
-Run the MCP server with the streamable-http transport layer: 
+Run the MCP server with the streamable-http transport layer:
 ```bash
-# Make sure the virtual environment is activated 
-source .venv/bin/activate
-
-python src/meteo_swiss_mcp_server.py --transport=streamable-http --host=localhost --port=8050
+uv run meteo-swiss-mcp-server --transport=streamable-http --host=localhost --port=8050
 ```
+
 ### Using the stdio transport layer
 Configure the mcp.json file in LMStudio. Replace `<path-to-the-project>` with your actual local path:
 ```json
 {
   "mcpServers": {
     "meteo_swiss_mcp_server": {
-      "command": "<path-to-the-project>/.venv/bin/python",
-      "args": [
-        "<path-to-the-project>/src/meteo_swiss_mcp_server.py"
-      ]
+      "command": "<path-to-the-project>/.venv/bin/meteo-swiss-mcp-server"
     }
   }
 }
 ```
 ![LMStudioMCPServer](docs/LMStudioMCPServer.png)
 
-## 🧪 Tests
-
-Run all tests with:
-
+## Tests
+Run the test suite from the project root with:
 ```bash
-cd tests
+uv run pytest
+
+# Or, with an activated virtual environment
 pytest
 ```
 
-## 📚 Useful Resources
+Every push and pull request runs the suite plus a Docker build check via the [Tests workflow](.github/workflows/tests.yaml).
 
-* [Meteo Swiss Open Data](https://www.meteoswiss.admin.ch/services-and-publications/service/open-data.html)  
-* [Jupyter Notebook Examples](https://github.com/MeteoSwiss/opendata-nwp-demos/tree/main)  
-* [Model Context Protocol](https://github.com/modelcontextprotocol/python-sdk)  
-* [MCP Server Quickstart](https://modelcontextprotocol.info/docs/quickstart/server/)
+## Releasing
 
-## 📄 License
+Versions are derived from Git tags by `hatch-vcs` — there is no version string to bump by hand.
 
-This project is licensed under the [Apache License 2.0](LICENSE.txt).
+- Pushing a pre-release tag (e.g. `0.2.0rc1`) triggers [`release_test.yaml`](.github/workflows/release_test.yaml): tests, publish to **TestPyPI**, push a versioned image to GHCR, and create a prerelease GitHub Release.
+- Pushing a final tag (e.g. `0.2.0`) triggers [`release.yaml`](.github/workflows/release.yaml): tests, publish to **PyPI**, push `:<version>` and `:latest` images to GHCR, and create a GitHub Release.
+
+Both publish jobs use PyPI [trusted publishing](https://docs.pypi.org/trusted-publishers/) via the `pypi` / `testpypi` GitHub environments — no API tokens are stored in the repository.
+
+## Resources
+- [Meteo Swiss Open Data](https://www.meteoswiss.admin.ch/services-and-publications/service/open-data.html)
+- [Jupyter Notebook Examples](https://github.com/MeteoSwiss/opendata-nwp-demos/tree/main)
+- [Model Context Protocol](https://github.com/modelcontextprotocol/python-sdk)
+- [MCP Server Quickstart](https://modelcontextprotocol.info/docs/quickstart/server/)
+
+## License
+Licensed under the [Apache License 2.0](/LICENSE.txt).
