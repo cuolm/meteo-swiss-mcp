@@ -10,7 +10,10 @@ env/
 venv/
 
 # Exclude version control files and folders
+# Note: excluding .git/ means hatch-vcs cannot read tags, so the Dockerfile
+# sets SETUPTOOLS_SCM_PRETEND_VERSION from the BUILD_VERSION build-arg instead.
 .git/
+.github/
 .gitignore
 
 # Exclude logs and cache folders

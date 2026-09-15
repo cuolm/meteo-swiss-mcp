@@ -1,0 +1,89 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs", "hatch-fancy-pypi-readme"]  # hatch-vcs used to sync versioning with latest git tag number
+build-backend = "hatchling.build"
+
+[project]
+name = "meteo-swiss-mcp"
+dynamic = ["version", "readme"]
+description = "MCP server exposing MeteoSwiss ICON-CH2-EPS weather forecasts for Switzerland as callable tools"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*"]
+authors = [
+    { name = "cuolm", email = "cuolm.approach717@passinbox.com" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Typing :: Typed",
+]
+dependencies = [
+    "earthkit-data>=0.10.0",
+    "geopy>=2.4.1",
+    "mcp>=1.13.1,<2",  # mcp 2.x renames FastMCP to MCPServer and changes the tool API
+    "meteodata-lab>=0.4.0",
+    "numpy>=1.26.4,<2",
+    "platformdirs>=4.11.4",
+    "pyproj>=3.7.2",
+    "python-dotenv>=1.1.1",
+    "rasterio>=1.4.3",
+    "requests>=2.32.0",
+    "scipy>=1.16.1",
+]
+
+[project.optional-dependencies]
+client = [
+    "ollama>=0.5.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=1.1.0",
+    "pytest-mock>=3.15.1",
+]
+
+[project.scripts]
+meteo-swiss-mcp-server = "meteo_swiss_mcp.server:main"
+meteo-swiss-mcp-client = "meteo_swiss_mcp.client:main"
+
+[project.urls]
+Homepage = "https://github.com/cuolm/meteo-swiss-mcp"
+Repository = "https://github.com/cuolm/meteo-swiss-mcp.git"
+Issues = "https://github.com/cuolm/meteo-swiss-mcp/issues"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]  # add src to sys.path when pytest runs
+testpaths = ["tests"]  # make pytest only discover tests under tests/
+addopts = "--import-mode=importlib"  # importlib-based importing for test modules
+asyncio_mode = "strict"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+# RULE 1: markdown images ![alt](docs/...) -> raw GitHub content
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '!\[(?P<alt>.*?)\]\((?!https?://)(?:\./|/)?docs/(?P<path>.+?)\)'
+replacement = '![\g<alt>](https://raw.githubusercontent.com/cuolm/meteo-swiss-mcp/master/docs/\g<path>)'
+
+# RULE 2: relative [text](path) links -> GitHub tree view.
+# (?<!!) excludes image syntax, so this cannot overlap with RULE 1.
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '(?<!!)\[(?P<text>.+?)\]\((?P<path>(?!https?://)\S+?)\)'
+replacement = '[\g<text>](https://github.com/cuolm/meteo-swiss-mcp/tree/master/\g<path>)'
+
+# RULE 3: HTML <img src="docs/..."> -> raw GitHub content
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = 'src="(?:\./|/)?docs/(?P<path>[^"]+)"'
+replacement = 'src="https://raw.githubusercontent.com/cuolm/meteo-swiss-mcp/master/docs/\g<path>"'
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/meteo_swiss_mcp"]

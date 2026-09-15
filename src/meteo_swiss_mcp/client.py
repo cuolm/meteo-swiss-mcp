@@ -1,45 +1,27 @@
 import argparse
 import asyncio
-import json
 import logging
 import subprocess
+import sys
 import time
 import requests
 from contextlib import AsyncExitStack
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from ollama import AsyncClient
 
-# Configure logger
-def _setup_logger() -> None:
-    try:
-        config_path = Path(__file__).parent.parent / "log_config.json"
-        with open(config_path, "rt") as f:
-            config = json.load(f)
-        logging.config.dictConfig(config)
-        logging.getLogger("meteo_swiss_mcp_client").info("Logger successfully configured")
-    except Exception as e:
-        logging.basicConfig(level=logging.ERROR) # logging.basicConfig() attaches the root logger to STDERR by default, so no interference with stdio MCP protocol
-        logging.getLogger("meteo_swiss_mcp_client").error(f"Failed to configure logger: {e}", exc_info=True)
+from . import setup_logging
 
-
-_setup_logger()
-logger = logging.getLogger("meteo_swiss_mcp_client")
+setup_logging()
+logger = logging.getLogger(__name__)
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MCP Client")
     parser.add_argument("--model", type=str, required=True,
                         help="LLM model name (e.g. 'qwen3:4b')")
-    parser.add_argument("--server-script", type=str, required=True,
-                        help="Path to server script (.py)")
-    args = parser.parse_args()
-    if not Path(args.server_script).exists():
-        parser.error(f"Server script {args.server_script} does not exist")
-    return args
+    return parser.parse_args()
 
 def _ensure_ollama() -> None:
     try:
@@ -73,11 +55,11 @@ class MCPClient:
         self.stdio: Optional[Any] = None
         self.write: Optional[Any] = None
 
-    async def connect_to_server(self, server_script_path: str) -> None:
-        # Server configuration
+    async def connect_to_server(self) -> None:
+        # Launch the server module with the same interpreter running this client
         server_params = StdioServerParameters(
-            command="python",
-            args=[server_script_path],
+            command=sys.executable,
+            args=["-m", "meteo_swiss_mcp.server"],
         )
 
         # Connect to the server
@@ -169,7 +151,7 @@ async def main():
     _ensure_ollama()
     args = _parse_args()
     client = MCPClient(args.model)
-    await client.connect_to_server(args.server_script)
+    await client.connect_to_server()
     try:
         logger.info(f"MCP Client started!")
         while True:

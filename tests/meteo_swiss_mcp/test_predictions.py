@@ -1,17 +1,8 @@
-# tests/test_meteo_swiss_predictions.py
-import pathlib
-import sys
 import numpy as np
 import pytest
 import xarray as xr
 
-root_path = pathlib.Path(__file__).parent.parent.absolute()
-src_path = str(root_path / "src")
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
-
-# Import the module under test
-from meteo_swiss_predictions import MeteoSwissPredictions, NUM_GRID_POINTS_X, NUM_GRID_POINTS_Y
+from meteo_swiss_mcp.predictions import MeteoSwissPredictions
 
 
 @pytest.fixture

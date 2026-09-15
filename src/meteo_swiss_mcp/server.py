@@ -1,31 +1,18 @@
 import argparse
-import json
 import logging
 from datetime import datetime, timedelta
-from pathlib import Path
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-from meteo_swiss_predictions import MeteoSwissPredictions
 
-# Load environment variables
-load_dotenv(Path(__file__).parent.parent / ".env")
+from . import setup_logging
+from .predictions import MeteoSwissPredictions
 
-# Configure logger
-def _setup_logger() -> None:
-    try:
-        config_path = Path(__file__).parent.parent / "log_config.json"
-        with open(config_path, "rt") as f:
-            config = json.load(f)
-        logging.config.dictConfig(config)
-        logging.getLogger("meteo_swiss_mcp_server").info("Logger successfully configured")
-    except Exception as e:
-        logging.basicConfig(level=logging.ERROR) # logging.basicConfig() attaches the root logger to STDERR by default, so no interference with stdio MCP protocol
-        logging.getLogger("meteo_swiss_mcp_server").error(f"Failed to configure logger: {e}", exc_info=True)
+# Load environment variables from a .env file found by searching upwards from the current working directory
+load_dotenv()
 
-
-_setup_logger()
-logger = logging.getLogger("meteo_swiss_mcp_server")
+setup_logging()
+logger = logging.getLogger(__name__)
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MCP Server")

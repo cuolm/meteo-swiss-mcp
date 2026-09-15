@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import logging.config
 import os
 from collections import namedtuple
 from datetime import datetime, timedelta, timezone
@@ -16,34 +15,24 @@ from rasterio.crs import CRS
 from xarray import DataArray
 
 from meteodatalab import ogd_api
-from meteodatalab.operators import regrid, wind
+from meteodatalab.operators import regrid
+
+from . import setup_logging
 
 
-# Load environment variables
-load_dotenv(Path(__file__).parent.parent / ".env")
+# Load environment variables from a .env file found by searching upwards from the current working directory
+load_dotenv()
 
-# Configure logger
-def _setup_logger():
-    try:
-        config_path = Path(__file__).parent.parent / "log_config.json"
-        with open(config_path, "rt") as f:
-            config = json.load(f)
-        logging.config.dictConfig(config)
-        logging.getLogger(__name__).info("Logger successfully configured")
-    except Exception as e:
-        logging.basicConfig(level=logging.ERROR)
-        logging.getLogger(__name__).error(f"Failed to configure logger: {e}", exc_info=True)
-
-_setup_logger()
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Configure caching
 # EarthKit cache
-CACHE_DIR = Path(__file__).parent.parent / "cache"
+CACHE_DIR = Path(__file__).parent.parent.parent / "cache"
 EARTHKIT_CACHE_DIR = CACHE_DIR / "EarthKitCache"
 settings.set({
     "cache-policy": "user",  # "user" = caches data persistently on disk in the specified directory ("temporary" = not persistent, only RAM)
-    "user-cache-directory": EARTHKIT_CACHE_DIR, 
+    "user-cache-directory": str(EARTHKIT_CACHE_DIR),
 })
 # Nominatim geocodecache atomic update
 GEOCODE_CACHE_FILE = CACHE_DIR / "nominatim_geocode_cache.json"
