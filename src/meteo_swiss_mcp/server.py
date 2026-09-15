@@ -33,6 +33,8 @@ def _lead_time_swiss_to_utc(lead_time_swiss: int) -> float:
     
     Handles DST (daylight saving time) transitions correctly by using timezone-aware datetimes.
     """
+    if lead_time_swiss < 0:
+        raise ValueError(f"lead_time_swiss must be a non-negative value, got {lead_time_swiss}")
 
     # Midnight in Swiss local time (today)
     midnight_swiss_datetime = datetime.now(ZoneInfo("Europe/Zurich")).replace(hour=0, minute=0, second=0, microsecond=0)

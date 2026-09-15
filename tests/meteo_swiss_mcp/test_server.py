@@ -65,3 +65,10 @@ def test_lead_time_swiss_to_utc_returns_int(freeze_swiss_now_fixture):
     freeze_swiss_now_fixture("2026-01-15T09:30:00")
 
     assert isinstance(_lead_time_swiss_to_utc(14), int)
+
+
+def test_lead_time_swiss_to_utc_negative_fail(freeze_swiss_now_fixture):
+    freeze_swiss_now_fixture("2026-01-15T09:30:00")
+
+    with pytest.raises(ValueError):
+        _lead_time_swiss_to_utc(-1)
