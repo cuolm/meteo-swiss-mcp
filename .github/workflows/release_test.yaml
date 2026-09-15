@@ -1,0 +1,147 @@
+name: Test Release
+
+on:
+  push:
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*a[0-9]*'
+      - '[0-9]*.[0-9]*.[0-9]*b[0-9]*'
+      - '[0-9]*.[0-9]*.[0-9]*rc[0-9]*'
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Install uv and Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install Dependencies
+        run: uv sync --group dev
+      - name: Run Pytest
+        run: uv run pytest
+
+  publish-docker-image:
+    name: Publish Docker Image
+    needs: [test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4  # initializes BuildKit engine required for gha cache backend
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+          labels: |
+            org.opencontainers.image.description=MeteoSwiss MCP server
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=${{ github.ref_name }}
+          cache-from: type=gha  # pulls previous layers and uv cache from GitHub to speed up the build
+          cache-to: type=gha,mode=max  # exports new layers and uv cache to GitHub for subsequent runs
+
+  build:
+    name: Build Distribution
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Install uv and Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Build sdist and wheel
+        run: uv build
+      - name: Store Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish-to-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/meteo-swiss-mcp
+    permissions:
+      id-token: write
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  github-release:
+    name: Create GitHub Release
+    needs: [build, publish-docker-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Download Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --tags --force
+
+          TAG_MSG=$(git tag -l --format='%(contents:body)' ${{ github.ref_name }})
+
+          if [ -z "$TAG_MSG" ]; then
+            TAG_MSG="Release ${{ github.ref_name }}"
+          fi
+
+          gh release delete ${{ github.ref_name }} --yes --cleanup-tag=false 2>/dev/null || true
+
+          gh release create ${{ github.ref_name }} dist/* \
+            --title "${{ github.ref_name }}" \
+            --notes "$TAG_MSG" \
+            --generate-notes \
+            --prerelease

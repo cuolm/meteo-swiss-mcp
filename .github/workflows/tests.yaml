@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Install uv and Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install Dependencies
+        run: uv sync --group dev
+      - name: Run Pytest
+        run: uv run pytest
+
+  docker-build-test:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Build Docker image
+        run: docker build -t meteo-swiss-mcp-ci-image .
