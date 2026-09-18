@@ -118,13 +118,6 @@ class MeteoSwissPredictions:
 
         See: https://github.com/MeteoSwiss/opendata-nwp-demos/blob/2ddfa03f4e3cfe3e57b0bf1696b62d9c5b61c2ad//computing_num_grid_points_x_num_grid_points_y.md
         """
-        if(num_grid_points_x < 1 or num_grid_points_y < 1):
-            logger.error("Number of grid points must be at least 1")
-            raise ValueError("Number of grid points must be at least 1")
-        if(res_x_km < 1 or res_y_km < 1):
-            logger.error("Resolution must be at least 1")
-            raise ValueError("Resolution must be at least 1")
-
         # In central europe at 46° latitude, 1° in lattitude direction corresponds to 111.2 km in that direction.
         # 1° of longitude corresponds to a smaller distance at 46° latitude due to the Earth's curvature and can be approximated by 111.2km * cos(46°)
         km_per_degree_x = 111.2 * np.cos(np.radians(46))
