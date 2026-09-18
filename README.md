@@ -33,8 +33,7 @@ meteo-swiss-mcp/
 ├── src/meteo_swiss_mcp/
 │   ├── server.py           # MCP server
 │   ├── predictions.py      # Data fetching logic
-│   ├── client.py           # MCP client (optional)
-│   └── log_config.json     # Packaged logging configuration
+│   └── client.py           # MCP client (optional)
 ├── tests/meteo_swiss_mcp/  # Pytest suite
 ├── .github/workflows/      # CI and release pipelines
 ├── docs/                   # Documentation

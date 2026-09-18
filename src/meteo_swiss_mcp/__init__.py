@@ -1,8 +1,6 @@
-import json
 import logging
 import logging.config
 from importlib.metadata import PackageNotFoundError, version
-from importlib.resources import files
 
 try:
     __version__ = version("meteo-swiss-mcp")
@@ -15,22 +13,55 @@ LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 def setup_logging(log_level: str = "INFO") -> None:
     """
-    Configure logging from the packaged log_config.json.
+    Configure the root logger ("") to capture logs from the entry point, all internal
+    sub-modules, and third-party libraries via a single handler writing to stderr.
 
-    The per-library levels in that file stay as they are, only the handler and
-    the root logger follow log_level, so raising verbosity does not bring back
-    the third-party output the config deliberately quiets.
+    Libraries that report their own progress get a fixed level of their own, so raising
+    log_level does not bring back the output they would otherwise flood the request with.
     """
-    try:
-        config = json.loads((files(__name__) / "log_config.json").read_text())
-        config["handlers"]["stderr"]["level"] = log_level
-        config["root"]["level"] = log_level
-        logging.config.dictConfig(config)
-        logging.getLogger(__name__).debug("Logger successfully configured")
-    except Exception as e:
-        # basicConfig() attaches the root logger to STDERR, so it cannot interfere with the stdio MCP protocol
-        logging.basicConfig(level=logging.ERROR)
-        logging.getLogger(__name__).error(f"Failed to configure logger: {e}", exc_info=True)
+    logger_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "standard": {
+                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            }
+        },
+        "handlers": {
+            "stderr_handler": {
+                "level": log_level,
+                "class": "logging.StreamHandler",
+                "formatter": "standard",
+                "stream": "ext://sys.stderr",  # stdout carries the MCP protocol on the stdio transport
+            }
+        },
+        "loggers": {
+            "": {  # "" corresponds to root logger
+                "handlers": ["stderr_handler"],
+                "level": log_level,
+                "propagate": False,
+            },
+            "earthkit.data": {  # cache bookkeeping on every download
+                "level": "ERROR",
+            },
+            "meteodatalab": {  # one line per retrieved GRIB request
+                "level": "WARNING",
+            },
+            "multiurl": {  # download progress
+                "level": "WARNING",
+            },
+            "httpx": {  # silence httpx HTTP request logs
+                "level": "WARNING",
+            },
+            "urllib3": {  # connection retries
+                "level": "WARNING",
+            },
+            "mcp.server": {  # one line per dispatched MCP request
+                "level": "WARNING",
+            },
+        },
+    }
+    logging.config.dictConfig(logger_config)
 
 
 __all__ = ["__version__", "LOG_LEVELS", "setup_logging"]
