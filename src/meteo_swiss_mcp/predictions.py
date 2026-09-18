@@ -16,6 +16,12 @@ from platformdirs import user_cache_path
 from rasterio.crs import CRS
 from xarray import DataArray
 
+# The DWD GRIB definitions warn on every decoded message when their version differs from the
+# ecCodes library, and meteodata-lab pins a definitions release that has no matching library
+# release, so the mismatch cannot be resolved here. Silence the check before the definitions are
+# loaded, keeping it overridable for anyone who wants to see it.
+os.environ.setdefault("ECCODES_VERSION_CHECK_OFF", "1")
+
 from meteodatalab import ogd_api
 from meteodatalab.operators import regrid
 
