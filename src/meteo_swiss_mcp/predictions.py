@@ -36,10 +36,19 @@ logger = logging.getLogger(__name__)
 # EarthKit cache
 CACHE_DIR = Path(os.environ.get("METEO_SWISS_MCP_CACHE_DIR", user_cache_path("meteo-swiss-mcp")))
 EARTHKIT_CACHE_DIR = CACHE_DIR / "EarthKitCache"
-settings.set({
-    "cache-policy": "user",  # "user" = caches data persistently on disk in the specified directory ("temporary" = not persistent, only RAM)
-    "user-cache-directory": str(EARTHKIT_CACHE_DIR),
-})
+
+def _setup_earthkit_cache() -> None:
+    """
+    Point earthkit at the shared cache directory.
+
+    Applying this reads the directory and can log about its size, so it runs on
+    construction rather than on import, once the entry point has set logging up.
+    """
+    settings.set({
+        "cache-policy": "user",  # "user" = caches data persistently on disk in the specified directory ("temporary" = not persistent, only RAM)
+        "user-cache-directory": str(EARTHKIT_CACHE_DIR),
+    })
+
 # Nominatim geocodecache atomic update
 GEOCODE_CACHE_FILE = CACHE_DIR / "nominatim_geocode_cache.json"
 def _load_geocode_cache() -> dict:
@@ -83,6 +92,7 @@ class MeteoSwissPredictions:
             raise ValueError(
                 "Nominatim user agent must be specified via the environment variable NOMINATIM_USER_AGENT."
             )
+        _setup_earthkit_cache()
         # Initialize geocode cache to reduce geocoding API requests
         self.geocode_cache = _load_geocode_cache()
 
