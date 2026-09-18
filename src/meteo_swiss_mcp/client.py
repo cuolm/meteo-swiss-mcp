@@ -166,7 +166,7 @@ class MCPClient:
         await self.exit_stack.aclose()
 
 
-async def main():
+async def _run():
     _ensure_ollama()
     args = _parse_args()
     client = MCPClient(args.model)
@@ -194,5 +194,8 @@ async def main():
     finally:
         await client.cleanup()
 
+def main():
+    asyncio.run(_run())
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
