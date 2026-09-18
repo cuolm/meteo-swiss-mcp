@@ -22,7 +22,7 @@ except ModuleNotFoundError as e:
         "    pip install 'meteo-swiss-mcp[client]'"
     ) from e
 
-from . import setup_logging
+from . import LOG_LEVELS, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,13 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MCP Client")
     parser.add_argument("--model", type=str, required=True,
                         help="LLM model name (e.g. 'qwen3:4b')")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=LOG_LEVELS,
+        help="Logging level for the client (default: INFO)",
+    )
     return parser.parse_args()
 
 def _ensure_ollama() -> None:
@@ -166,7 +173,7 @@ class MCPClient:
 
 async def _run():
     args = _parse_args()
-    setup_logging()
+    setup_logging(args.log_level)
     _ensure_ollama()
     client = MCPClient(args.model)
     await client.connect_to_server()

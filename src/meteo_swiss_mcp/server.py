@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
-from . import setup_logging
+from . import LOG_LEVELS, setup_logging
 from .predictions import MeteoSwissPredictions
 
 # Load environment variables from a .env file found by searching upwards from the current working directory
@@ -24,6 +24,13 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--host", default="localhost", help="Server host (used only for HTTP)")
     parser.add_argument("--port", type=int, default=8050, help="Server port (used only for HTTP)")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=LOG_LEVELS,
+        help="Logging level for the server (default: INFO)",
+    )
     return parser.parse_args()
 
 def _lead_time_swiss_to_utc(lead_time_swiss: int) -> int:
@@ -343,7 +350,7 @@ class MeteoSwissMCPServer:
 def main():
     try:
         args = _parse_args()
-        setup_logging()
+        setup_logging(args.log_level)
         server = MeteoSwissMCPServer(args)
         server.run()
     except KeyboardInterrupt:
