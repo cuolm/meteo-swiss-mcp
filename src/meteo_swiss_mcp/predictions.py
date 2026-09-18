@@ -84,7 +84,6 @@ class MeteoSwissPredictions:
         # Initielize nominatim geocoder
         self.nominatim_user_agent = os.environ.get("NOMINATIM_USER_AGENT")
         if not self.nominatim_user_agent:
-            logger.error("Nominatim user agent must be specified via the environment variable NOMINATIM_USER_AGENT.")
             raise ValueError(
                 "Nominatim user agent must be specified via the environment variable NOMINATIM_USER_AGENT."
             )
@@ -155,14 +154,11 @@ class MeteoSwissPredictions:
             xarray.DataArray: Regridded raw data array covering the specified bounding box and lead time period.
         """
         if not (0 <= lead_time_start <= 120):
-            logger.error("lead_time_start must be between 0 and 120")
-            raise ValueError("lead_time_start must be between 0 and 120")
+            raise ValueError(f"lead_time_start must be between 0 and 120, got {lead_time_start}")
         if not (1 <= lead_time_end <= 120):
-            logger.error("lead_time_end must be between 1 and 120")
-            raise ValueError("lead_time_end must be between 1 and 120")
+            raise ValueError(f"lead_time_end must be between 1 and 120, got {lead_time_end}")
         if lead_time_end <= lead_time_start:
-            logger.error("lead_time_end must be greater to lead_time_start")
-            raise ValueError("lead_time_end must be greater to lead_time_start")
+            raise ValueError(f"lead_time_end must be greater than lead_time_start, got lead_time_start={lead_time_start}, lead_time_end={lead_time_end}")
         
         # Calculate the grid bounding box around the location
         location_lat, location_lon = await self._get_latlon_for_location(location)
@@ -187,8 +183,7 @@ class MeteoSwissPredictions:
         try:
             raw_data = await asyncio.to_thread(ogd_api.get_from_ogd, req)
         except Exception as e:
-            logger.exception(f"Error fetching data from MeteoSwiss API: {e}")
-            raise RuntimeError(f"Error fetching data from MeteoSwiss API: {e}")
+            raise RuntimeError(f"Error fetching data from MeteoSwiss API: {e}") from e
 
         # Regrid raw data from ICON grid onto regular lon/lat grid
         target_grid = regrid.RegularGrid(CRS.from_epsg(4326), num_grid_points_x, num_grid_points_y, x_min_deg, x_max_deg, y_min_deg, y_max_deg)
@@ -219,8 +214,7 @@ class MeteoSwissPredictions:
             xarray.DataArray: Regridded raw data array for the specified bounding box and lead time.
         """
         if not (0 <= lead_time <= 120):
-            logger.error("lead_time must be between 0 and 120")
-            raise ValueError("lead_time must be between 0 and 120")
+            raise ValueError(f"lead_time must be between 0 and 120, got {lead_time}")
         
         # Calculate the grid bounding box around the location
         location_lat, location_lon = await self._get_latlon_for_location(location)
@@ -242,8 +236,7 @@ class MeteoSwissPredictions:
         try:
             raw_data = await asyncio.to_thread(ogd_api.get_from_ogd, req)
         except Exception as e:
-            logger.exception(f"Error fetching data from MeteoSwiss API: {e}")
-            raise RuntimeError(f"Error fetching data from MeteoSwiss API: {e}")
+            raise RuntimeError(f"Error fetching data from MeteoSwiss API: {e}") from e
 
         # Regrid raw data from ICON grid onto regular lon/lat grid
         target_grid = regrid.RegularGrid(CRS.from_epsg(4326), num_grid_points_x, num_grid_points_y, x_min_deg, x_max_deg, y_min_deg, y_max_deg)
@@ -260,13 +253,10 @@ class MeteoSwissPredictions:
         try:
             location = await asyncio.to_thread(geolocator.geocode, location_name + ", Switzerland")
         except GeocoderInsufficientPrivileges as e:
-            logger.error(f"Nominatim denied the request for location {location_name}, either NOMINATIM_USER_AGENT does not identify a real application and contact address, or the request rate exceeded the usage policy: {e}")
-            raise RuntimeError(f"Nominatim denied the request for location {location_name}, either NOMINATIM_USER_AGENT does not identify a real application and contact address, or the request rate exceeded the usage policy: {e}")
+            raise RuntimeError(f"Nominatim denied the request for location {location_name}, either NOMINATIM_USER_AGENT does not identify a real application and contact address, or the request rate exceeded the usage policy: {e}") from e
         except Exception as e:
-            logger.exception(f"Error during gecoding for location {location_name} {e}")
-            raise RuntimeError(f"Error during geocoding for location {location_name} {e}")
+            raise RuntimeError(f"Error during geocoding for location {location_name}: {e}") from e
         if location is None:
-            logger.error(f"Could not find location: {location_name}")
             raise ValueError(f"Could not find location: {location_name}")
 
         # Update geocode cache and write updated cache to disk atomically

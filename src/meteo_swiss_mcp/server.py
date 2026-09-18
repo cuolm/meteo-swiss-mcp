@@ -127,7 +127,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as e:
                 logger.exception(f"Failed to get total rainfall for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get total rainfall for location '{location}': {e}")
+                raise RuntimeError(f"Failed to get total rainfall for location '{location}': {e}") from e
 
         @self.mcp.tool()
         async def sunshine_hours(location: str, lead_time_start_swiss: int, lead_time_end_swiss: int) -> float:
@@ -166,7 +166,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as e:
                 logger.exception(f"Failed to get sunshine hours for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get sunshine hours for location '{location}': {e}")
+                raise RuntimeError(f"Failed to get sunshine hours for location '{location}': {e}") from e
 
         @self.mcp.tool()
         async def temperature(location: str, lead_time_swiss: int) -> float:
@@ -193,7 +193,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as e:
                 logger.exception(f"Failed to get temperature for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get temperature for location '{location}': {e}")
+                raise RuntimeError(f"Failed to get temperature for location '{location}': {e}") from e
 
         @self.mcp.tool()
         async def wind_speed(location: str, lead_time_swiss: int) -> float:
@@ -220,7 +220,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as e:
                 logger.exception(f"Failed to get wind speed for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get wind speed for location '{location}': {e}")
+                raise RuntimeError(f"Failed to get wind speed for location '{location}': {e}") from e
 
         @self.mcp.tool()
         async def pressure_msl(location: str, lead_time_swiss: int) -> float:
@@ -247,7 +247,7 @@ class MeteoSwissMCPServer:
                 return result  
             except Exception as e:
                 logger.exception(f"Failed to get pressure for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get pressure for location '{location}': {e}")
+                raise RuntimeError(f"Failed to get pressure for location '{location}': {e}") from e
 
         @self.mcp.tool()
         async def total_cloud_cover(location: str, lead_time_swiss: int) -> float:
@@ -274,7 +274,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as e:
                 logger.exception(f"Failed to get total cloud cover for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get total cloud cover for location '{location}': {e}")
+                raise RuntimeError(f"Failed to get total cloud cover for location '{location}': {e}") from e
 
         @self.mcp.tool()
         async def snow_depth(location: str, lead_time_swiss: int) -> float:
@@ -301,7 +301,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as e:
                 logger.exception(f"Failed to get snow depth for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get snow depth for location '{location}': {e}")
+                raise RuntimeError(f"Failed to get snow depth for location '{location}': {e}") from e
 
         @self.mcp.tool()
         async def precipitation_rate(location: str, lead_time_swiss: int) -> float:
@@ -328,7 +328,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as e:
                 logger.exception(f"Failed to get precipitation rate for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get precipitation rate for location '{location}': {e}")
+                raise RuntimeError(f"Failed to get precipitation rate for location '{location}': {e}") from e
 
     def run(self):
         if self.transport == "stdio":
