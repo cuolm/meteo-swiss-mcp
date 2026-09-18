@@ -12,7 +12,6 @@ from .predictions import MeteoSwissPredictions
 # Load environment variables from a .env file found by searching upwards from the current working directory
 load_dotenv()
 
-setup_logging()
 logger = logging.getLogger(__name__)
 
 def _parse_args() -> argparse.Namespace:
@@ -344,6 +343,7 @@ class MeteoSwissMCPServer:
 def main():
     try:
         args = _parse_args()
+        setup_logging()
         server = MeteoSwissMCPServer(args)
         server.run()
     except KeyboardInterrupt:

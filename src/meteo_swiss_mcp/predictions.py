@@ -25,13 +25,9 @@ os.environ.setdefault("ECCODES_VERSION_CHECK_OFF", "1")
 from meteodatalab import ogd_api
 from meteodatalab.operators import regrid
 
-from . import setup_logging
-
-
 # Load environment variables from a .env file found by searching upwards from the current working directory
 load_dotenv()
 
-setup_logging()
 logger = logging.getLogger(__name__)
 
 # Configure caching
@@ -389,31 +385,3 @@ class MeteoSwissPredictions:
         precip_yx_mean = precip_eps_mean.mean(dim=["y", "x"])
         precip_mm_per_sec = float(precip_yx_mean.item())
         return precip_mm_per_sec
-    
-
-# Example usage
-async def main():
-    meteo_swiss = MeteoSwissPredictions()
-    location_name = "Zurich"
-    lead_time_start = 0
-    lead_time_end = 24
-    lead_time = 14
-    rainfall_mm = await meteo_swiss.total_rainfall_for_location(location_name, lead_time_start, lead_time_end)
-    sunshine_hours = await meteo_swiss.sunshine_hours_for_location(location_name, lead_time_start, lead_time_end)
-    temp_C = await meteo_swiss.temp_for_location(location_name, lead_time)
-    wind_mps = await meteo_swiss.wind_speed_for_location(location_name, lead_time)
-    pressure_msl_Pa = await meteo_swiss.pressure_msl_for_location(location_name, lead_time)
-    cloud_cover = await meteo_swiss.total_cloud_cover_for_location(location_name, lead_time) 
-    snow_depth = await meteo_swiss.snow_depth_for_location(location_name, lead_time)
-    total_precipitation_rate = await meteo_swiss.total_precipitation_rate_for_location(location_name, lead_time)
-    logger.info(f"Total rainfall in {location_name} for {lead_time_start} to {lead_time_end} hours: {rainfall_mm:.2f} mm")
-    logger.info(f"Mean sunshine in {location_name} for {lead_time_start} to {lead_time_end} hours: {sunshine_hours:.2f} h")
-    logger.info(f"Temperature in {location_name} for lead time {lead_time} hours: {temp_C:.2f} C")
-    logger.info(f"Wind speed in {location_name} for lead time {lead_time} hours: {wind_mps:.2f} m/s")
-    logger.info(f"Pressure in {location_name} for lead time {lead_time} hours: {pressure_msl_Pa:.2f} Pa")
-    logger.info(f"Cloud cover in {location_name} for lead time {lead_time} hours: {cloud_cover:.2f} %")
-    logger.info(f"Snow depth in {location_name} for lead time {lead_time} hours: {snow_depth:.2f} m")
-    logger.info(f"Total precipitation rate in {location_name} for lead time {lead_time} hours: {total_precipitation_rate:.2f} kg/m^2/s")
-
-if __name__ == "__main__":
-    asyncio.run(main())

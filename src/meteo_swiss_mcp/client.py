@@ -24,7 +24,6 @@ except ModuleNotFoundError as e:
 
 from . import setup_logging
 
-setup_logging()
 logger = logging.getLogger(__name__)
 
 def _parse_args() -> argparse.Namespace:
@@ -168,6 +167,7 @@ class MCPClient:
 
 async def _run():
     args = _parse_args()
+    setup_logging()
     _ensure_ollama()
     client = MCPClient(args.model)
     await client.connect_to_server()
