@@ -27,24 +27,31 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=8050, help="Server port (used only for HTTP)")
     return parser.parse_args()
 
-def _lead_time_swiss_to_utc(lead_time_swiss: int) -> float:
+def _lead_time_swiss_to_utc(lead_time_swiss: int) -> int:
     """
-    Convert a lead time expressed in Swiss local hours since midnight
-    into the equivalent lead time in UTC hours since the same UTC midnight.
-    
+    Convert a lead time expressed in Swiss local hours since Swiss midnight
+    into the equivalent lead time in hours since today's 00:00 UTC.
+
+    The forecast API counts lead times from 00:00 UTC (MeteoSwissPredictions passes it
+    as ref_time), so the Swiss lead time has to be re-expressed against that anchor.
+
     Handles DST (daylight saving time) transitions correctly by using timezone-aware datetimes.
     """
     if lead_time_swiss < 0:
         raise ValueError(f"lead_time_swiss must be a non-negative value, got {lead_time_swiss}")
 
+    now_swiss_datetime = datetime.now(ZoneInfo("Europe/Zurich"))
+
     # Midnight in Swiss local time (today)
-    midnight_swiss_datetime = datetime.now(ZoneInfo("Europe/Zurich")).replace(hour=0, minute=0, second=0, microsecond=0)
+    midnight_swiss_datetime = now_swiss_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Target time in Swiss local time
-    target_time_swiss_datetime = midnight_swiss_datetime + timedelta(hours=lead_time_swiss) 
+    target_time_swiss_datetime = midnight_swiss_datetime + timedelta(hours=lead_time_swiss)
 
-    # Convert both to UTC
-    midnight_utc_datetime = midnight_swiss_datetime.astimezone(ZoneInfo("UTC"))
+    # Midnight in UTC (today), the anchor the forecast API counts lead times from
+    midnight_utc_datetime = now_swiss_datetime.astimezone(ZoneInfo("UTC")).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Target time as a UTC instant
     target_time_utc_datetime = target_time_swiss_datetime.astimezone(ZoneInfo("UTC"))
 
     # Compute difference in hours
