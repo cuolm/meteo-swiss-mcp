@@ -115,6 +115,12 @@ Create a `.env` file in the directory you'll run the server from, specifying an 
 echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
 ```
 
+> **Note:** Replace the application name and address with your own. The
+> [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/) requires a
+> user agent identifying a real application and contact address, and blocks requests that do not
+> provide one. Keep lookups to at most one per second; results are cached, so only locations that
+> have not been requested before reach the service.
+
 ## Usage
 
 ### Running the Server
