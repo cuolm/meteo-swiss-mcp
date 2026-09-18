@@ -7,15 +7,35 @@
         }
     },
     "handlers": {
-        "stdout": {
+        "stderr": {
             "level": "INFO",
             "class": "logging.StreamHandler",
             "formatter": "standard",
             "stream": "ext://sys.stderr"
         }
     },
+    "loggers": {
+        "earthkit.data": {
+            "level": "ERROR"
+        },
+        "meteodatalab": {
+            "level": "WARNING"
+        },
+        "multiurl": {
+            "level": "WARNING"
+        },
+        "httpx": {
+            "level": "WARNING"
+        },
+        "mcp.server": {
+            "level": "WARNING"
+        },
+        "urllib3": {
+            "level": "WARNING"
+        }
+    },
     "root": {
-        "handlers": ["stdout"],
+        "handlers": ["stderr"],
         "level": "INFO",
         "propagate": true
     }

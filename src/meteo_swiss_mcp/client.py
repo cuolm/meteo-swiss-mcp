@@ -85,11 +85,10 @@ class MCPClient:
         # Initialize the connection
         await self.session.initialize()
 
-        # List available tools
+        # List available tools, names only, the descriptions are multi line docstrings
         tools_result = await self.session.list_tools()
-        logger.info("Connected to server with tools:")
-        for tool in tools_result.tools:
-            logger.info(f"  - {tool.name}: {tool.description}")
+        tool_names = ", ".join(tool.name for tool in tools_result.tools)
+        logger.info(f"Connected to server with tools: {tool_names}")
 
     async def get_mcp_tools(self) -> List[Dict[str, Any]]:
         tools_result = await self.session.list_tools()
