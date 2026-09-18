@@ -167,8 +167,8 @@ class MCPClient:
 
 
 async def _run():
-    _ensure_ollama()
     args = _parse_args()
+    _ensure_ollama()
     client = MCPClient(args.model)
     await client.connect_to_server()
     try:
