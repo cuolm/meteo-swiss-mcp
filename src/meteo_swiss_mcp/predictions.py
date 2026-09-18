@@ -10,6 +10,7 @@ from typing import Tuple
 import numpy as np
 from dotenv import load_dotenv
 from earthkit.data import settings
+from geopy.exc import GeocoderInsufficientPrivileges
 from geopy.geocoders import Nominatim
 from platformdirs import user_cache_path
 from rasterio.crs import CRS
@@ -64,6 +65,9 @@ def _save_geocode_cache(cache):
 DistanceOffset = namedtuple('DistanceOffset', ['x', 'y'])
 NUM_GRID_POINTS_X = 7
 NUM_GRID_POINTS_Y = 7
+
+# Nominatim is a shared public service, geopy's 1 second default is not enough to complete a request
+GEOCODE_TIMEOUT_SECONDS = 10
 
 
 class MeteoSwissPredictions:
@@ -253,9 +257,12 @@ class MeteoSwissPredictions:
             lat, lon = self.geocode_cache[location_name]
             return lat, lon        
 
-        geolocator = Nominatim(user_agent=self.nominatim_user_agent)
+        geolocator = Nominatim(user_agent=self.nominatim_user_agent, timeout=GEOCODE_TIMEOUT_SECONDS)
         try:
             location = await asyncio.to_thread(geolocator.geocode, location_name + ", Switzerland")
+        except GeocoderInsufficientPrivileges as e:
+            logger.error(f"Nominatim denied the request for location {location_name}, either NOMINATIM_USER_AGENT does not identify a real application and contact address, or the request rate exceeded the usage policy: {e}")
+            raise RuntimeError(f"Nominatim denied the request for location {location_name}, either NOMINATIM_USER_AGENT does not identify a real application and contact address, or the request rate exceeded the usage policy: {e}")
         except Exception as e:
             logger.exception(f"Error during gecoding for location {location_name} {e}")
             raise RuntimeError(f"Error during geocoding for location {location_name} {e}")
