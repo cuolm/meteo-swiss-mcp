@@ -338,7 +338,6 @@ class MeteoSwissMCPServer:
             logger.info("Running server with Streamable HTTP transport")
             self.mcp.run(transport="streamable-http")
         else:
-            logger.exception(f"Unknown transport: {self.transport}")
             raise ValueError(f"Unknown transport: {self.transport}")
 
 
