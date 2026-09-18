@@ -76,6 +76,7 @@ class MeteoSwissMCPServer:
             host=self.host,
             port=self.port,
             stateless_http=True,
+            log_level=args.log_level,  # forwarded to uvicorn, which configures its own loggers
         )
 
         self.meteo = MeteoSwissPredictions()
