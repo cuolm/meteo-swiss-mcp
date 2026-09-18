@@ -72,7 +72,6 @@ class MeteoSwissPredictions:
         self.distance_offset_degree = self._calc_distance_offset_in_degree(num_grid_points_x=NUM_GRID_POINTS_X, num_grid_points_y=NUM_GRID_POINTS_Y, res_x_km=1, res_y_km=1) 
 
         # Initielize nominatim geocoder
-        self.today_midnight_utc = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         self.nominatim_user_agent = os.environ.get("NOMINATIM_USER_AGENT")
         if not self.nominatim_user_agent:
             logger.error("Nominatim user agent must be specified via the environment variable NOMINATIM_USER_AGENT.")
@@ -81,6 +80,12 @@ class MeteoSwissPredictions:
             )
         # Initialize geocode cache to reduce geocoding API requests
         self.geocode_cache = _load_geocode_cache()
+
+    def _today_midnight_utc(self) -> datetime:
+        """
+        Return today's 00:00 UTC, the reference time the forecast run is anchored at.
+        """
+        return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
     def _calc_distance_offset_in_degree(
             self,
@@ -170,7 +175,7 @@ class MeteoSwissPredictions:
         req = ogd_api.Request(
             collection="ogd-forecasting-icon-ch2",
             variable=variable,
-            ref_time=self.today_midnight_utc,
+            ref_time=self._today_midnight_utc(),
             lead_time=lead_times,
             perturbed=True,       
         )
@@ -225,7 +230,7 @@ class MeteoSwissPredictions:
         req = ogd_api.Request(
             collection="ogd-forecasting-icon-ch2",
             variable=variable,
-            ref_time=self.today_midnight_utc,
+            ref_time=self._today_midnight_utc(),
             lead_time=timedelta(hours=lead_time),
             perturbed=True,
         )
