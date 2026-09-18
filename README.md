@@ -89,13 +89,16 @@ git clone https://github.com/cuolm/meteo-swiss-mcp.git
 cd meteo-swiss-mcp
 
 # Using uv (Recommended)
-uv sync
+uv sync --extra client
 
 # Using pip
 python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[client]"
 ```
+
+> **Note:** `uv sync` on its own installs the server only. The `--extra client` flag is
+> what pulls in the Ollama SDK needed by `meteo-swiss-mcp-client`.
 
 **Note:**
 - [Ollama](https://ollama.com/) is optional – only needed if you want to use the MCP client (`meteo-swiss-mcp-client`, installed via the `client` extra).
@@ -168,7 +171,7 @@ ollama pull qwen3:4b
 meteo-swiss-mcp-client --model=qwen3:4b
 
 # From a source checkout, using uv
-uv run meteo-swiss-mcp-client --model=qwen3:4b
+uv run --extra client meteo-swiss-mcp-client --model=qwen3:4b
 ```
 
 ## Available Tools
