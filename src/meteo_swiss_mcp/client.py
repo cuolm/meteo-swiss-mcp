@@ -11,7 +11,16 @@ from typing import Any, Dict, List, Optional
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from ollama import AsyncClient, ChatResponse
+
+try:
+    from ollama import AsyncClient, ChatResponse
+except ModuleNotFoundError as e:
+    raise SystemExit(
+        "The MCP client needs the Ollama SDK, which ships in the optional 'client' extra.\n"
+        "Install it with one of:\n"
+        "    uv sync --extra client          # from a source checkout\n"
+        "    pip install 'meteo-swiss-mcp[client]'"
+    ) from e
 
 from . import setup_logging
 
