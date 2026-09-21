@@ -19,7 +19,8 @@ except ModuleNotFoundError as e:
     raise SystemExit(
         "The MCP client needs the Ollama SDK, which ships in the optional 'client' extra.\n"
         "Install it with one of:\n"
-        "    uv sync --extra client          # from a source checkout\n"
+        "    uv tool install 'swiss-weather-mcp[client]'   # installed as a tool\n"
+        "    uv sync --extra client                        # from a source checkout\n"
         "    pip install 'swiss-weather-mcp[client]'"
     ) from e
 

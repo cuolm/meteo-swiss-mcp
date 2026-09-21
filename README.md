@@ -69,6 +69,9 @@ swiss-weather-mcp-server
 ### As a Global CLI Tool
 ```bash
 uv tool install swiss-weather-mcp
+
+# With the optional MCP client, which pulls in the Ollama SDK
+uv tool install 'swiss-weather-mcp[client]'
 ```
 
 ### As a Library Dependency
