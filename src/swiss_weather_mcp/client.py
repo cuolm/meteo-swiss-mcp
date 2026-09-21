@@ -9,6 +9,7 @@ import requests
 from contextlib import AsyncExitStack
 from typing import Any, Dict, List, Optional
 
+from dotenv import find_dotenv, load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -174,6 +175,7 @@ class MCPClient:
 async def _run():
     args = _parse_args()
     setup_logging(args.log_level)
+    load_dotenv(find_dotenv(usecwd=True))
     _ensure_ollama()
     client = MCPClient(args.model)
     await client.connect_to_server()

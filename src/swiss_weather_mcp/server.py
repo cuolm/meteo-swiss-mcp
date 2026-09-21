@@ -3,14 +3,11 @@ import logging
 import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from mcp.server.fastmcp import FastMCP
 
 from . import LOG_LEVELS, setup_logging
 from .predictions import MeteoSwissPredictions
-
-# Load environment variables from a .env file found by searching upwards from the current working directory
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -352,6 +349,7 @@ def main():
     try:
         args = _parse_args()
         setup_logging(args.log_level)
+        load_dotenv(find_dotenv(usecwd=True))
         server = MeteoSwissMCPServer(args)
         server.run()
     except KeyboardInterrupt:

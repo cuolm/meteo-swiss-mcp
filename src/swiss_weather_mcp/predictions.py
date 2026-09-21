@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Tuple
 
 import numpy as np
-from dotenv import load_dotenv
 from earthkit.data import settings
 from geopy.exc import GeocoderInsufficientPrivileges
 from geopy.geocoders import Nominatim
@@ -24,9 +23,6 @@ os.environ.setdefault("ECCODES_VERSION_CHECK_OFF", "1")
 
 from meteodatalab import ogd_api
 from meteodatalab.operators import regrid
-
-# Load environment variables from a .env file found by searching upwards from the current working directory
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
