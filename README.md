@@ -101,7 +101,7 @@ pip install -e ".[client]"
 
 **Note:**
 - [Ollama](https://ollama.com/) is optional – only needed if you want to use the MCP client (`meteo-swiss-mcp-client`, installed via the `client` extra).
-- The server reads its `.env` file relative to the **current working directory** — run it from the directory that holds your `.env` file (or export the variable directly).
+- The server reads its `.env` file relative to the **current working directory** — run it from the directory that holds your `.env` file. Exporting `NOMINATIM_USER_AGENT` in your shell works when you start the server yourself, but not with `meteo-swiss-mcp-client`: the MCP stdio transport only forwards a fixed list of environment variables to the server it starts, so the client needs the `.env` file.
 - Caches are stored under your OS's standard cache directory (via [platformdirs](https://github.com/tox-dev/platformdirs), e.g. `~/Library/Caches/meteo-swiss-mcp` on macOS, `~/.cache/meteo-swiss-mcp` on Linux) — independent of where the server is launched from, so downloaded forecasts and geocoded locations are reused across runs.
   - `EarthKitCache/` avoids re‑downloading weather data. Delete it to clear.
   - `nominatim_geocode_cache.json` caches lat/lon lookups. Delete it to clear.
