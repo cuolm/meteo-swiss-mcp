@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from meteo_swiss_mcp.server import _lead_time_swiss_to_utc
+from swiss_weather_mcp.server import _lead_time_swiss_to_utc
 
 
 @pytest.fixture
@@ -14,7 +14,7 @@ def freeze_swiss_now_fixture(mocker):
     """
     def freeze(iso: str) -> None:
         frozen = datetime.fromisoformat(iso).replace(tzinfo=ZoneInfo("Europe/Zurich"))
-        datetime_mock = mocker.patch("meteo_swiss_mcp.server.datetime", wraps=datetime)
+        datetime_mock = mocker.patch("swiss_weather_mcp.server.datetime", wraps=datetime)
         datetime_mock.now.return_value = frozen
 
     return freeze

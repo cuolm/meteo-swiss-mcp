@@ -19,7 +19,7 @@ except ModuleNotFoundError as e:
         "The MCP client needs the Ollama SDK, which ships in the optional 'client' extra.\n"
         "Install it with one of:\n"
         "    uv sync --extra client          # from a source checkout\n"
-        "    pip install 'meteo-swiss-mcp[client]'"
+        "    pip install 'swiss-weather-mcp[client]'"
     ) from e
 
 from . import LOG_LEVELS, setup_logging
@@ -77,7 +77,7 @@ class MCPClient:
         # Launch the server module with the same interpreter running this client
         server_params = StdioServerParameters(
             command=sys.executable,
-            args=["-m", "meteo_swiss_mcp.server"],
+            args=["-m", "swiss_weather_mcp.server"],
         )
 
         # Connect to the server

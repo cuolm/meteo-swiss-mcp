@@ -3,7 +3,7 @@ requires = ["hatchling", "hatch-vcs", "hatch-fancy-pypi-readme"]  # hatch-vcs us
 build-backend = "hatchling.build"
 
 [project]
-name = "meteo-swiss-mcp"
+name = "swiss-weather-mcp"
 dynamic = ["version", "readme"]
 description = "MCP server exposing MeteoSwiss ICON-CH2-EPS weather forecasts for Switzerland as callable tools"
 requires-python = ">=3.11,<3.13"
@@ -46,13 +46,13 @@ dev = [
 ]
 
 [project.scripts]
-meteo-swiss-mcp-server = "meteo_swiss_mcp.server:main"
-meteo-swiss-mcp-client = "meteo_swiss_mcp.client:main"
+swiss-weather-mcp-server = "swiss_weather_mcp.server:main"
+swiss-weather-mcp-client = "swiss_weather_mcp.client:main"
 
 [project.urls]
-Homepage = "https://github.com/cuolm/meteo-swiss-mcp"
-Repository = "https://github.com/cuolm/meteo-swiss-mcp.git"
-Issues = "https://github.com/cuolm/meteo-swiss-mcp/issues"
+Homepage = "https://github.com/cuolm/swiss-weather-mcp"
+Repository = "https://github.com/cuolm/swiss-weather-mcp.git"
+Issues = "https://github.com/cuolm/swiss-weather-mcp/issues"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]  # add src to sys.path when pytest runs
@@ -72,18 +72,18 @@ path = "README.md"
 # RULE 1: markdown images ![alt](docs/...) -> raw GitHub content
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '!\[(?P<alt>.*?)\]\((?!https?://)(?:\./|/)?docs/(?P<path>.+?)\)'
-replacement = '![\g<alt>](https://raw.githubusercontent.com/cuolm/meteo-swiss-mcp/master/docs/\g<path>)'
+replacement = '![\g<alt>](https://raw.githubusercontent.com/cuolm/swiss-weather-mcp/master/docs/\g<path>)'
 
 # RULE 2: relative [text](path) links -> GitHub tree view.
 # (?<!!) excludes image syntax, so this cannot overlap with RULE 1.
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '(?<!!)\[(?P<text>.+?)\]\((?P<path>(?!https?://)\S+?)\)'
-replacement = '[\g<text>](https://github.com/cuolm/meteo-swiss-mcp/tree/master/\g<path>)'
+replacement = '[\g<text>](https://github.com/cuolm/swiss-weather-mcp/tree/master/\g<path>)'
 
 # RULE 3: HTML <img src="docs/..."> -> raw GitHub content
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = 'src="(?:\./|/)?docs/(?P<path>[^"]+)"'
-replacement = 'src="https://raw.githubusercontent.com/cuolm/meteo-swiss-mcp/master/docs/\g<path>"'
+replacement = 'src="https://raw.githubusercontent.com/cuolm/swiss-weather-mcp/master/docs/\g<path>"'
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/meteo_swiss_mcp"]
+packages = ["src/swiss_weather_mcp"]

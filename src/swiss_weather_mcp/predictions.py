@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 
 # Configure caching
 # Shared, OS-standard cache location (survives across working directories the server may be launched from).
-# Override with METEO_SWISS_MCP_CACHE_DIR, e.g. to isolate cache location in tests or Docker.
+# Override with SWISS_WEATHER_MCP_CACHE_DIR, e.g. to isolate cache location in tests or Docker.
 # EarthKit cache
-CACHE_DIR = Path(os.environ.get("METEO_SWISS_MCP_CACHE_DIR", user_cache_path("meteo-swiss-mcp")))
+CACHE_DIR = Path(os.environ.get("SWISS_WEATHER_MCP_CACHE_DIR", user_cache_path("swiss-weather-mcp")))
 EARTHKIT_CACHE_DIR = CACHE_DIR / "EarthKitCache"
 
 def _setup_earthkit_cache() -> None:

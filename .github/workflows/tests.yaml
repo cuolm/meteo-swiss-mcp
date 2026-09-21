@@ -30,4 +30,4 @@ jobs:
         with:
           fetch-depth: 0
       - name: Build Docker image
-        run: docker build -t meteo-swiss-mcp-ci-image .
+        run: docker build -t swiss-weather-mcp-ci-image .

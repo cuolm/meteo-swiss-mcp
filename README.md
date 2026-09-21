@@ -1,8 +1,8 @@
-# MeteoSwiss MCP Server
-[![PyPI](https://img.shields.io/pypi/v/meteo-swiss-mcp.svg)](https://pypi.org/project/meteo-swiss-mcp/)
-[![License](https://img.shields.io/github/license/cuolm/meteo-swiss-mcp.svg)](/LICENSE.txt)
-[![Release](https://github.com/cuolm/meteo-swiss-mcp/actions/workflows/release.yaml/badge.svg)](https://github.com/cuolm/meteo-swiss-mcp/actions/workflows/release.yaml)
-[![Tests](https://github.com/cuolm/meteo-swiss-mcp/actions/workflows/tests.yaml/badge.svg)](https://github.com/cuolm/meteo-swiss-mcp/actions/workflows/tests.yaml)
+# Swiss Weather MCP Server
+[![PyPI](https://img.shields.io/pypi/v/swiss-weather-mcp.svg)](https://pypi.org/project/swiss-weather-mcp/)
+[![License](https://img.shields.io/github/license/cuolm/swiss-weather-mcp.svg)](/LICENSE.txt)
+[![Release](https://github.com/cuolm/swiss-weather-mcp/actions/workflows/release.yaml/badge.svg)](https://github.com/cuolm/swiss-weather-mcp/actions/workflows/release.yaml)
+[![Tests](https://github.com/cuolm/swiss-weather-mcp/actions/workflows/tests.yaml/badge.svg)](https://github.com/cuolm/swiss-weather-mcp/actions/workflows/tests.yaml)
 
 A **Model Context Protocol ([MCP](https://modelcontextprotocol.info/))** server that exposes Swiss weather forecast data as callable tools.
 It fetches data from the official [MeteoSwiss](https://opendatadocs.meteoswiss.ch/e-forecast-data/e2-e3-numerical-weather-forecasting-model) [meteodata-lab](https://meteoswiss.github.io/meteodata-lab/), caches it locally, and serves predictions such as rainfall, sunshine, temperature, etc. The prediction data is from the [ICON-CH2-EPS](https://www.meteoswiss.admin.ch/weather/warning-and-forecasting-systems/icon-forecasting-systems.html) forecast system that produces data for up to 5 days ahead.
@@ -29,12 +29,12 @@ All forecast data are from the [MeteoSwiss Open Data](https://opendata.swiss/en/
 
 ## Project Structure
 ```text
-meteo-swiss-mcp/
-├── src/meteo_swiss_mcp/
+swiss-weather-mcp/
+├── src/swiss_weather_mcp/
 │   ├── server.py           # MCP server
 │   ├── predictions.py      # Data fetching logic
 │   └── client.py           # MCP client (optional)
-├── tests/meteo_swiss_mcp/  # Pytest suite
+├── tests/swiss_weather_mcp/  # Pytest suite
 ├── .github/workflows/      # CI and release pipelines
 ├── docs/                   # Documentation
 ├── pyproject.toml          # Project metadata and dependencies
@@ -49,7 +49,7 @@ Caches live outside the project, under your OS's standard cache directory (see [
 ### 1. Installation
 Install the server globally to run it anywhere on your system:
 ```bash
-uv tool install meteo-swiss-mcp
+uv tool install swiss-weather-mcp
 ```
 
 ### 2. Configuration
@@ -61,31 +61,31 @@ echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > 
 ### 3. Execution
 Run the server from the directory containing your `.env` file:
 ```bash
-meteo-swiss-mcp-server
+swiss-weather-mcp-server
 ```
 
 ## Installation
 
 ### As a Global CLI Tool
 ```bash
-uv tool install meteo-swiss-mcp
+uv tool install swiss-weather-mcp
 ```
 
 ### As a Library Dependency
 ```bash
 # Using uv
-uv add meteo-swiss-mcp
+uv add swiss-weather-mcp
 
 # Using pip
-pip install meteo-swiss-mcp
+pip install swiss-weather-mcp
 ```
 
-> **Note:** Add the `client` extra (`meteo-swiss-mcp[client]`) if you also want the optional MCP client, which pulls in the Ollama SDK.
+> **Note:** Add the `client` extra (`swiss-weather-mcp[client]`) if you also want the optional MCP client, which pulls in the Ollama SDK.
 
 ### From Source
 ```bash
-git clone https://github.com/cuolm/meteo-swiss-mcp.git
-cd meteo-swiss-mcp
+git clone https://github.com/cuolm/swiss-weather-mcp.git
+cd swiss-weather-mcp
 
 # Using uv (Recommended)
 uv sync --extra client
@@ -97,12 +97,12 @@ pip install -e ".[client]"
 ```
 
 > **Note:** `uv sync` on its own installs the server only. The `--extra client` flag is
-> what pulls in the Ollama SDK needed by `meteo-swiss-mcp-client`.
+> what pulls in the Ollama SDK needed by `swiss-weather-mcp-client`.
 
 **Note:**
-- [Ollama](https://ollama.com/) is optional – only needed if you want to use the MCP client (`meteo-swiss-mcp-client`, installed via the `client` extra).
-- The server reads its `.env` file relative to the **current working directory** — run it from the directory that holds your `.env` file. Exporting `NOMINATIM_USER_AGENT` in your shell works when you start the server yourself, but not with `meteo-swiss-mcp-client`: the MCP stdio transport only forwards a fixed list of environment variables to the server it starts, so the client needs the `.env` file.
-- Caches are stored under your OS's standard cache directory (via [platformdirs](https://github.com/tox-dev/platformdirs), e.g. `~/Library/Caches/meteo-swiss-mcp` on macOS, `~/.cache/meteo-swiss-mcp` on Linux) — independent of where the server is launched from, so downloaded forecasts and geocoded locations are reused across runs.
+- [Ollama](https://ollama.com/) is optional – only needed if you want to use the MCP client (`swiss-weather-mcp-client`, installed via the `client` extra).
+- The server reads its `.env` file relative to the **current working directory** — run it from the directory that holds your `.env` file. Exporting `NOMINATIM_USER_AGENT` in your shell works when you start the server yourself, but not with `swiss-weather-mcp-client`: the MCP stdio transport only forwards a fixed list of environment variables to the server it starts, so the client needs the `.env` file.
+- Caches are stored under your OS's standard cache directory (via [platformdirs](https://github.com/tox-dev/platformdirs), e.g. `~/Library/Caches/swiss-weather-mcp` on macOS, `~/.cache/swiss-weather-mcp` on Linux) — independent of where the server is launched from, so downloaded forecasts and geocoded locations are reused across runs.
   - `EarthKitCache/` avoids re‑downloading weather data. Delete it to clear.
   - `nominatim_geocode_cache.json` caches lat/lon lookups. Delete it to clear.
 
@@ -126,24 +126,24 @@ echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > 
 If installed via `uv tool install` or `pip`:
 ```bash
 # stdio (default)
-meteo-swiss-mcp-server
+swiss-weather-mcp-server
 
 # streamable-http
-meteo-swiss-mcp-server --transport=streamable-http --host=localhost --port=8050
+swiss-weather-mcp-server --transport=streamable-http --host=localhost --port=8050
 ```
 
 If running within the source repository cloned from GitHub:
 ```bash
 # Using uv (Recommended)
-uv run meteo-swiss-mcp-server
+uv run swiss-weather-mcp-server
 
 # Using pip, with the virtual environment activated
-meteo-swiss-mcp-server
+swiss-weather-mcp-server
 ```
 Optional flags: `--help`
 
 ### Running the Server with Docker
-Images are built and published automatically by GitHub Actions to the project's [GitHub Container Registry](https://ghcr.io/cuolm/meteo-swiss-mcp), tagged `:latest` (newest release) and by version.
+Images are built and published automatically by GitHub Actions to the project's [GitHub Container Registry](https://ghcr.io/cuolm/swiss-weather-mcp), tagged `:latest` (newest release) and by version.
 
 1. Create a `.env` file containing your Nominatim user agent environment variable (replace `"YourWeatherMCPServer/1.0 (yourname@example.com)"`):
 ```bash
@@ -151,7 +151,7 @@ echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > 
 ```
 2. Run the published image, passing the `.env` file and mapping port 8050:
 ```bash
-docker run --env-file .env -p 8050:8050 ghcr.io/cuolm/meteo-swiss-mcp:latest
+docker run --env-file .env -p 8050:8050 ghcr.io/cuolm/swiss-weather-mcp:latest
 ```
 3. Access the server at:
 ```bash
@@ -160,8 +160,8 @@ http://localhost:8050/mcp/
 
 #### Manual Build
 ```bash
-docker build -t meteo-swiss-mcp .
-docker run --env-file .env -p 8050:8050 meteo-swiss-mcp
+docker build -t swiss-weather-mcp .
+docker run --env-file .env -p 8050:8050 swiss-weather-mcp
 ```
 
 ### Running the MCP Client using Stdio Transport
@@ -173,10 +173,10 @@ Make sure Ollama is installed on your system. You can [download it here](https:/
 ollama pull qwen3:4b
 
 # Run the MCP client (it automatically starts the server as a subprocess)
-meteo-swiss-mcp-client --model=qwen3:4b
+swiss-weather-mcp-client --model=qwen3:4b
 
 # From a source checkout, using uv
-uv run --extra client meteo-swiss-mcp-client --model=qwen3:4b
+uv run --extra client swiss-weather-mcp-client --model=qwen3:4b
 ```
 
 ## Available Tools
@@ -205,7 +205,7 @@ Configure the mcp.json file in [LMStudio](https://lmstudio.ai/):
 ```json
 {
   "mcpServers": {
-    "meteo_swiss_mcp_server": {
+    "swiss_weather_mcp_server": {
       "url": "http://localhost:8050/mcp/"
     }
   }
@@ -213,7 +213,7 @@ Configure the mcp.json file in [LMStudio](https://lmstudio.ai/):
 ```
 Run the MCP server with the streamable-http transport layer:
 ```bash
-uv run meteo-swiss-mcp-server --transport=streamable-http --host=localhost --port=8050
+uv run swiss-weather-mcp-server --transport=streamable-http --host=localhost --port=8050
 ```
 
 ### Using the stdio transport layer
@@ -221,8 +221,8 @@ Configure the mcp.json file in LMStudio. Replace `<path-to-the-project>` with yo
 ```json
 {
   "mcpServers": {
-    "meteo_swiss_mcp_server": {
-      "command": "<path-to-the-project>/.venv/bin/meteo-swiss-mcp-server"
+    "swiss_weather_mcp_server": {
+      "command": "<path-to-the-project>/.venv/bin/swiss-weather-mcp-server"
     }
   }
 }

@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/meteo-swiss-mcp
+      url: https://test.pypi.org/p/swiss-weather-mcp
     permissions:
       id-token: write
     steps:

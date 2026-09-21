@@ -71,7 +71,7 @@ class MeteoSwissMCPServer:
         self.port = args.port
         self.transport = args.transport
         self.mcp = FastMCP(
-            name="meteo_swiss_mcp_server",
+            name="swiss_weather_mcp_server",
             instructions="This MCP server provides hourly weather forecast data for Switzerland for up to 5 days ahead.",
             host=self.host,
             port=self.port,

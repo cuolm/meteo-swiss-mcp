@@ -45,4 +45,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Port used by the streamable-http transport
 EXPOSE 8050
 
-CMD ["meteo-swiss-mcp-server", "--transport=streamable-http", "--host=0.0.0.0", "--port=8050"]
+CMD ["swiss-weather-mcp-server", "--transport=streamable-http", "--host=0.0.0.0", "--port=8050"]

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from meteo_swiss_mcp.predictions import MeteoSwissPredictions
+from swiss_weather_mcp.predictions import MeteoSwissPredictions
 
 
 @pytest.fixture
