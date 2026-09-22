@@ -35,7 +35,7 @@ dependencies = [
 
 [project.optional-dependencies]
 client = [
-    "ollama>=0.5.3",
+    "openai>=2.0",
 ]
 
 [dependency-groups]

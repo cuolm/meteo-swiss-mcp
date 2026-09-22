@@ -70,7 +70,7 @@ swiss-weather-mcp-server
 ```bash
 uv tool install swiss-weather-mcp
 
-# With the optional MCP client, which pulls in the Ollama SDK
+# With the optional MCP client, which pulls in the OpenAI SDK
 uv tool install 'swiss-weather-mcp[client]'
 ```
 
@@ -81,9 +81,11 @@ uv add swiss-weather-mcp
 
 # Using pip
 pip install swiss-weather-mcp
-```
 
-> **Note:** Add the `client` extra (`swiss-weather-mcp[client]`) if you also want the optional MCP client, which pulls in the Ollama SDK.
+# With the optional MCP client, which pulls in the OpenAI SDK
+uv add 'swiss-weather-mcp[client]'
+pip install 'swiss-weather-mcp[client]'
+```
 
 ### From Source
 ```bash
@@ -100,10 +102,10 @@ pip install -e ".[client]"
 ```
 
 > **Note:** `uv sync` on its own installs the server only. The `--extra client` flag is
-> what pulls in the Ollama SDK needed by `swiss-weather-mcp-client`.
+> what pulls in the OpenAI SDK needed by `swiss-weather-mcp-client`.
 
 **Note:**
-- [Ollama](https://ollama.com/) is optional – only needed if you want to use the MCP client (`swiss-weather-mcp-client`, installed via the `client` extra).
+- `llama-server` has to be **already running** when you start the MCP client (`swiss-weather-mcp-client`, installed via the `client` extra), because the client talks to it but never starts it. The MCP server itself does not need it.
 - The server reads its `.env` file relative to the **current working directory** — run it from the directory that holds your `.env` file. Exporting `NOMINATIM_USER_AGENT` in your shell works when you start the server yourself, but not with `swiss-weather-mcp-client`: the MCP stdio transport only forwards a fixed list of environment variables to the server it starts, so the client needs the `.env` file.
 - Importing the package as a library does **not** read a `.env` file. Only the `swiss-weather-mcp-server` and `swiss-weather-mcp-client` entry points do that. `MeteoSwissPredictions` reads `NOMINATIM_USER_AGENT` from the environment, and it is up to the calling application to decide how it gets there.
 - Caches are stored under your OS's standard cache directory (via [platformdirs](https://github.com/tox-dev/platformdirs), e.g. `~/Library/Caches/swiss-weather-mcp` on macOS, `~/.cache/swiss-weather-mcp` on Linux) — independent of where the server is launched from, so downloaded forecasts and geocoded locations are reused across runs.
@@ -169,19 +171,29 @@ docker run --env-file .env -p 8050:8050 swiss-weather-mcp
 ```
 
 ### Running the MCP Client using Stdio Transport
-The bundled MCP client can be used to test the server over the stdio transport. It requires the `client` extra (see [Installation](#installation)).
-Make sure Ollama is installed on your system. You can [download it here](https://ollama.com/download) or install via Homebrew on macOS: `brew install ollama`
+The bundled MCP client can be used to test the server over the stdio transport. It requires the `client` extra (see [Installation](#installation)). The client starts the MCP server itself, but not the model server, which has to be running first.
 
+1. Install [llama.cpp](https://github.com/ggml-org/llama.cpp), which provides `llama-server`:
 ```bash
-# Pull a local Ollama LLM model (e.g. qwen3:4b)
-ollama pull qwen3:4b
-
-# Run the MCP client (it automatically starts the server as a subprocess)
-swiss-weather-mcp-client --model=qwen3:4b
+brew install llama.cpp
+```
+2. Start it in its own terminal, downloading the model on first use:
+```bash
+llama-server --jinja --no-mmproj -hf unsloth/Qwen3.5-4B-GGUF --port 8080
+```
+3. Run the client against it in a second terminal:
+```bash
+swiss-weather-mcp-client --model=unsloth/Qwen3.5-4B-GGUF --base-url=http://localhost:8080/v1
 
 # From a source checkout, using uv
-uv run --extra client swiss-weather-mcp-client --model=qwen3:4b
+uv run --extra client swiss-weather-mcp-client --model=unsloth/Qwen3.5-4B-GGUF --base-url=http://localhost:8080/v1
 ```
+
+> **Note:** `--jinja` applies the model's chat template, without which tool calling is unsupported.
+> `--no-mmproj` skips the vision projector that `-hf` downloads alongside some models.
+> `--base-url` defaults to `llama-server`'s address; any other OpenAI compatible backend works by
+> pointing it elsewhere, for example [LM Studio](https://lmstudio.ai/) or [vLLM](https://docs.vllm.ai/).
+> Pass `--model` exactly as the server reports it under `/v1/models`.
 
 ## Available Tools
 

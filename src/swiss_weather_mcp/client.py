@@ -1,11 +1,8 @@
 import argparse
 import asyncio
+import json
 import logging
-import os
-import subprocess
 import sys
-import time
-import requests
 from contextlib import AsyncExitStack
 from typing import Any, Dict, List, Optional
 
@@ -14,10 +11,10 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 try:
-    from ollama import AsyncClient, ChatResponse
+    from openai import AsyncOpenAI
 except ModuleNotFoundError as e:
     raise SystemExit(
-        "The MCP client needs the Ollama SDK, which ships in the optional 'client' extra.\n"
+        "The MCP client needs the OpenAI SDK, which ships in the optional 'client' extra.\n"
         "Install it with one of:\n"
         "    uv tool install 'swiss-weather-mcp[client]'   # installed as a tool\n"
         "    uv sync --extra client                        # from a source checkout\n"
@@ -31,7 +28,9 @@ logger = logging.getLogger(__name__)
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MCP Client")
     parser.add_argument("--model", type=str, required=True,
-                        help="LLM model name (e.g. 'qwen3:4b')")
+                        help="Model name as the server reports it")
+    parser.add_argument("--base-url", type=str, default="http://localhost:8080/v1",
+                        help="OpenAI compatible endpoint of an already running server (default: %(default)s)")
     parser.add_argument(
         "--log-level",
         type=str,
@@ -41,35 +40,11 @@ def _parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-def _ensure_ollama() -> None:
-    ollama_base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-    try:
-        # Ping Ollama API
-        requests.get(f"{ollama_base_url}/api/tags", timeout=1)
-        logger.info("Ollama running.")
-    except Exception:
-        logger.info("Starting Ollama server...")
-        # Start Ollama, do not write to the console
-        subprocess.Popen(
-            ["ollama", "serve"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        # Wait until server is ready
-        for _ in range(20):
-            try:
-                requests.get(f"{ollama_base_url}/api/tags", timeout=1)
-                logger.info("Ollama started.")
-                return
-            except Exception:
-                time.sleep(0.5)
-        raise RuntimeError("Failed to start Ollama within timeout")
-
 class MCPClient:
-    def __init__(self, model: str):
+    def __init__(self, model: str, base_url: str):
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
-        self.ollama_client = AsyncClient()
+        self.llm_client = AsyncOpenAI(base_url=base_url, api_key="not-needed")  # local servers ignore the key
         self.model = model
         self.messages: List[Dict[str, Any]] = []
         self.stdio: Optional[Any] = None
@@ -113,21 +88,21 @@ class MCPClient:
             for tool in tools_result.tools
         ]
     
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
-        logger.info(f"Tool: {tool_name} called with arguments: {arguments}")
+    async def call_tool(self, tool_name: str, arguments_json: str) -> str:
+        logger.info(f"Tool: {tool_name} called with arguments: {arguments_json}")
         try:
+            arguments = json.loads(arguments_json or "{}")  # the model writes these as JSON text
             response = await self.session.call_tool(tool_name, arguments)
-            return response
+            return response.content[0].text
         except Exception as e:
             logger.error(f"Tool {tool_name} failed: {e}")
             return f"Error calling tool {tool_name}: {str(e)}"
 
-    def _format_assistant_message(self, response: ChatResponse) -> Dict[str, Any]:
+    def _format_assistant_message(self, message: Any) -> Dict[str, Any]:
         """
         Standardizes assistant messages into a clean dictionary format.
         Preserves tool_calls while removing internal metadata (images, thinking, etc).
         """
-        message = response.message
         formatted_message = {
             "role": "assistant",
             "content": message.content or ""
@@ -137,6 +112,8 @@ class MCPClient:
         if message.tool_calls:
             formatted_message["tool_calls"] = [
                 {
+                    "id": call.id,  # each result has to reference the call it answers
+                    "type": "function",
                     "function": {
                         "name": call.function.name,
                         "arguments": call.function.arguments,
@@ -152,21 +129,23 @@ class MCPClient:
         tools = await self.get_mcp_tools()
 
         while True:
-            response = await self.ollama_client.chat(model=self.model, messages=self.messages, tools=tools)
-            assistant_message = self._format_assistant_message(response)
-            self.messages.append(assistant_message)
+            response = await self.llm_client.chat.completions.create(
+                model=self.model, messages=self.messages, tools=tools
+            )
+            message = response.choices[0].message
+            self.messages.append(self._format_assistant_message(message))
 
             # If no tools were requested, we have the final answer
-            if not response.message.tool_calls:
-                return response.message.content
+            if not message.tool_calls:
+                return message.content
 
             # Process each tool call
-            for tool_call in response.message.tool_calls:
+            for tool_call in message.tool_calls:
                 tool_call_response = await self.call_tool(tool_call.function.name, tool_call.function.arguments)
                 self.messages.append({
                     "role": "tool",
-                    "name": tool_call.function.name,
-                    "content": tool_call_response.content[0].text,
+                    "tool_call_id": tool_call.id,
+                    "content": tool_call_response,
                 })
 
     async def cleanup(self):
@@ -177,8 +156,7 @@ async def _run():
     args = _parse_args()
     setup_logging(args.log_level)
     load_dotenv(find_dotenv(usecwd=True))
-    _ensure_ollama()
-    client = MCPClient(args.model)
+    client = MCPClient(args.model, args.base_url)
     await client.connect_to_server()
     try:
         logger.info(f"MCP Client started!")
