@@ -9,10 +9,8 @@ It fetches data from the official [MeteoSwiss](https://opendatadocs.meteoswiss.c
 
 Additionally there is also an MCP client that can be run to test the server using the stdio transport.
 
-**Note:**
-This project is **not an official MeteoSwiss product**.
-All forecast data are from the [MeteoSwiss Open Data](https://opendata.swiss/en/organization/bundesamt-fur-meteorologie-und-klimatologie-meteoschweiz) portal.
-**Source: MeteoSwiss**
+> **Note:** This project is **not an official MeteoSwiss product**. All forecast data are from the
+> [MeteoSwiss Open Data](https://opendata.swiss/en/organization/bundesamt-fur-meteorologie-und-klimatologie-meteoschweiz) portal. **Source: MeteoSwiss**
 
 ## Table of Contents
 - [Project Structure](#project-structure)
@@ -101,16 +99,22 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[client]"
 ```
 
-> **Note:** `uv sync` on its own installs the server only. The `--extra client` flag is
-> what pulls in the OpenAI SDK needed by `swiss-weather-mcp-client`.
+> **Note:** `uv sync` installs the server only. `--extra client` adds the OpenAI SDK needed by
+> `swiss-weather-mcp-client`.
 
-**Note:**
-- `llama-server` has to be **already running** when you start the MCP client (`swiss-weather-mcp-client`, installed via the `client` extra), because the client talks to it but never starts it. The MCP server itself does not need it.
-- The server reads its `.env` file relative to the **current working directory** — run it from the directory that holds your `.env` file. Exporting `NOMINATIM_USER_AGENT` in your shell works when you start the server yourself, but not with `swiss-weather-mcp-client`: the MCP stdio transport only forwards a fixed list of environment variables to the server it starts, so the client needs the `.env` file.
-- Importing the package as a library does **not** read a `.env` file. Only the `swiss-weather-mcp-server` and `swiss-weather-mcp-client` entry points do that. `MeteoSwissPredictions` reads `NOMINATIM_USER_AGENT` from the environment, and it is up to the calling application to decide how it gets there.
-- Caches are stored under your OS's standard cache directory (via [platformdirs](https://github.com/tox-dev/platformdirs), e.g. `~/Library/Caches/swiss-weather-mcp` on macOS, `~/.cache/swiss-weather-mcp` on Linux) — independent of where the server is launched from, so downloaded forecasts and geocoded locations are reused across runs.
-  - `EarthKitCache/` avoids re‑downloading weather data. Delete it to clear.
-  - `nominatim_geocode_cache.json` caches lat/lon lookups. Delete it to clear.
+> **Note:**
+> - `llama-server` must already be running when you start `swiss-weather-mcp-client`, which talks to it
+>   but never starts it. The MCP server itself does not need it.
+> - The `.env` file is read from the **current working directory**, so run the server from the directory
+>   holding it. Exporting `NOMINATIM_USER_AGENT` works when you start the server yourself, but not
+>   through `swiss-weather-mcp-client`: the MCP stdio transport forwards only a fixed list of variables.
+> - A `.env` file is read only by the two entry points, not when the package is imported as a library.
+>   `MeteoSwissPredictions` takes `NOMINATIM_USER_AGENT` from the environment, and the calling
+>   application decides how it gets there.
+> - Caches live in your OS cache directory (via [platformdirs](https://github.com/tox-dev/platformdirs),
+>   e.g. `~/Library/Caches/swiss-weather-mcp` on macOS, `~/.cache/swiss-weather-mcp` on Linux),
+>   independent of where the server runs, so forecasts and geocoded locations are reused. Delete
+>   `EarthKitCache/` or `nominatim_geocode_cache.json` to clear them.
 
 ## Configuration
 
@@ -120,11 +124,10 @@ Create a `.env` file in the directory you'll run the server from, specifying an 
 echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
 ```
 
-> **Note:** Replace the application name and address with your own. The
-> [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/) requires a
-> user agent identifying a real application and contact address, and blocks requests that do not
-> provide one. Keep lookups to at most one per second; results are cached, so only locations that
-> have not been requested before reach the service.
+> **Note:** Replace the name and address with your own. The
+> [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/) requires a user
+> agent identifying a real application and contact address, and blocks requests without one. Keep
+> lookups to at most one per second. Results are cached, so only new locations reach the service.
 
 ## Usage
 
@@ -152,17 +155,17 @@ Optional flags: `--help`
 Images are built and published automatically by GitHub Actions to the project's [GitHub Container Registry](https://ghcr.io/cuolm/swiss-weather-mcp), tagged `:latest` (newest release) and by version.
 
 1. Create a `.env` file containing your Nominatim user agent environment variable (replace `"YourWeatherMCPServer/1.0 (yourname@example.com)"`):
-```bash
-echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
-```
+   ```bash
+   echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
+   ```
 2. Run the published image, passing the `.env` file and mapping port 8050:
-```bash
-docker run --env-file .env -p 8050:8050 ghcr.io/cuolm/swiss-weather-mcp:latest
-```
+   ```bash
+   docker run --env-file .env -p 8050:8050 ghcr.io/cuolm/swiss-weather-mcp:latest
+   ```
 3. Access the server at:
-```bash
-http://localhost:8050/mcp/
-```
+   ```bash
+   http://localhost:8050/mcp/
+   ```
 
 #### Manual Build
 ```bash
@@ -174,26 +177,26 @@ docker run --env-file .env -p 8050:8050 swiss-weather-mcp
 The bundled MCP client can be used to test the server over the stdio transport. It requires the `client` extra (see [Installation](#installation)). The client starts the MCP server itself, but not the model server, which has to be running first.
 
 1. Install [llama.cpp](https://github.com/ggml-org/llama.cpp), which provides `llama-server`:
-```bash
-brew install llama.cpp
-```
+   ```bash
+   brew install llama.cpp
+   ```
 2. Start it in its own terminal, downloading the model on first use:
-```bash
-llama-server --jinja --no-mmproj -hf unsloth/Qwen3.5-4B-GGUF --port 8080
-```
+   ```bash
+   llama-server --jinja --no-mmproj -hf unsloth/Qwen3.5-4B-GGUF --port 8080
+   ```
 3. Run the client against it in a second terminal:
-```bash
-swiss-weather-mcp-client --model=unsloth/Qwen3.5-4B-GGUF --base-url=http://localhost:8080/v1
+   ```bash
+   swiss-weather-mcp-client --model=unsloth/Qwen3.5-4B-GGUF --base-url=http://localhost:8080/v1
 
-# From a source checkout, using uv
-uv run --extra client swiss-weather-mcp-client --model=unsloth/Qwen3.5-4B-GGUF --base-url=http://localhost:8080/v1
-```
+   # From a source checkout, using uv
+   uv run --extra client swiss-weather-mcp-client --model=unsloth/Qwen3.5-4B-GGUF --base-url=http://localhost:8080/v1
+   ```
 
-> **Note:** `--jinja` applies the model's chat template, without which tool calling is unsupported.
-> `--no-mmproj` skips the vision projector that `-hf` downloads alongside some models.
-> `--base-url` defaults to `llama-server`'s address; any other OpenAI compatible backend works by
-> pointing it elsewhere, for example [LM Studio](https://lmstudio.ai/) or [vLLM](https://docs.vllm.ai/).
-> Pass `--model` exactly as the server reports it under `/v1/models`.
+> **Note:** `--jinja` applies the model's chat template, without which tool calling is unsupported, and
+> `--no-mmproj` skips the vision projector that `-hf` downloads alongside some models. `--base-url`
+> defaults to `llama-server`'s address, and any other OpenAI compatible backend works by pointing it
+> elsewhere, for example [LM Studio](https://lmstudio.ai/) or [vLLM](https://docs.vllm.ai/). Pass
+> `--model` exactly as the server reports it under `/v1/models`.
 
 ## Available Tools
 
@@ -212,7 +215,7 @@ uv run --extra client swiss-weather-mcp-client --model=unsloth/Qwen3.5-4B-GGUF -
 **Lead Time**
 - Lead time is the number of hours counted from Swiss local time 00:00, internally converted to UTC (the ICON-CH2-EPS forecast system uses UTC).
 - Example: A lead time of 36 hours returns the forecast for 12:00 Swiss local time tomorrow.
-- Minimum lead time: 2 hours; maximum lead time: 121 hours.
+- Minimum lead time: 2 hours, maximum lead time: 121 hours.
 
 ## Example Usage with LMStudio
 
