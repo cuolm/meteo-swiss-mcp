@@ -24,3 +24,6 @@ env/
 .vscode/
 .idea/
 
+
+# Local exploration scratch space
+explore/

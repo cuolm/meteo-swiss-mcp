@@ -1,393 +1,285 @@
 import asyncio
-import json
 import logging
 import os
-from collections import namedtuple
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime
 from pathlib import Path
-from typing import Tuple
+from typing import Any, Dict, Optional, Tuple
+from zoneinfo import ZoneInfo
 
-import numpy as np
-from earthkit.data import settings
-from geopy.exc import GeocoderInsufficientPrivileges
-from geopy.geocoders import Nominatim
 from platformdirs import user_cache_path
-from rasterio.crs import CRS
-from xarray import DataArray
 
-# The DWD GRIB definitions warn on every decoded message when their version differs from the
-# ecCodes library, and meteodata-lab pins a definitions release that has no matching library
-# release, so the mismatch cannot be resolved here. Silence the check before the definitions are
-# loaded, keeping it overridable for anyone who wants to see it.
-os.environ.setdefault("ECCODES_VERSION_CHECK_OFF", "1")
-
-from meteodatalab import ogd_api
-from meteodatalab.operators import regrid
+from .localforecast import PICTOGRAM_DESCRIPTIONS, LocalForecast, Point, Series
 
 logger = logging.getLogger(__name__)
 
-# Configure caching
 # Shared, OS-standard cache location (survives across working directories the server may be launched from).
 # Override with SWISS_WEATHER_MCP_CACHE_DIR, e.g. to isolate cache location in tests or Docker.
-# EarthKit cache
 CACHE_DIR = Path(os.environ.get("SWISS_WEATHER_MCP_CACHE_DIR", user_cache_path("swiss-weather-mcp")))
-EARTHKIT_CACHE_DIR = CACHE_DIR / "EarthKitCache"
 
-def _setup_earthkit_cache() -> None:
-    """
-    Point earthkit at the shared cache directory.
+SWISS_TZ = ZoneInfo("Europe/Zurich")
 
-    Applying this reads the directory and can log about its size, so it runs on
-    construction rather than on import, once the entry point has set logging up.
-    """
-    settings.set({
-        "cache-policy": "user",  # "user" = caches data persistently on disk in the specified directory ("temporary" = not persistent, only RAM)
-        "user-cache-directory": str(EARTHKIT_CACHE_DIR),
-    })
+# Compass points the wind direction in degrees is reported as, clockwise from north
+COMPASS_POINTS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                  "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
 
-# Nominatim geocodecache atomic update
-GEOCODE_CACHE_FILE = CACHE_DIR / "nominatim_geocode_cache.json"
-def _load_geocode_cache() -> dict:
-    """
-    Try to load the cache from disk or return an empty one.
-    """
-    try:
-        with open(GEOCODE_CACHE_FILE, "r") as f:
-            cache_raw = json.load(f)
-            return {k: tuple(v) for k, v in cache_raw.items()}
-    except Exception:
-        logger.warning("Failed to load geocode cache, using empty.")
-        return {}
+# Which daily parameter answers which field of the daily forecast
+DAILY_PARAMETERS = (
+    ("temperature_min_c", "tre200pn"),
+    ("temperature_max_c", "tre200px"),
+    ("rainfall_mm", "rka150p0"),
+    ("rainfall_min_mm", "rreq10p0"),
+    ("rainfall_max_mm", "rreq90p0"),
+    ("weather", "jp2000d0"),
+)
 
-def _save_geocode_cache(cache):
-    """
-    Atomically write the cache avoiding corruption on failure by first writing to a temporary file and then replacing the original. 
-    """
-    tmp_file = GEOCODE_CACHE_FILE.with_suffix('.tmp')
-    with open(tmp_file, "w") as f:
-        json.dump(cache, f)
-    tmp_file.replace(GEOCODE_CACHE_FILE)
 
-# Configure the number of grid points for the bounding box around the location
-DistanceOffset = namedtuple('DistanceOffset', ['x', 'y'])
-NUM_GRID_POINTS_X = 7
-NUM_GRID_POINTS_Y = 7
+def _utc_hour(moment: datetime) -> datetime:
+    """Round a moment down to the UTC hour the forecast rows are keyed by."""
+    return moment.astimezone(ZoneInfo("UTC")).replace(minute=0, second=0, microsecond=0)
 
-# Nominatim is a shared public service, geopy's 1 second default is not enough to complete a request
-GEOCODE_TIMEOUT_SECONDS = 10
+
+def _swiss(moment: datetime) -> str:
+    """Render a moment as Swiss local time, for messages a person reads."""
+    return f"{moment.astimezone(SWISS_TZ):%Y-%m-%d %H:%M}"
+
+
+def _valid_at(moment: datetime) -> str:
+    """Render a moment as a Swiss local timestamp, for the answer a tool returns."""
+    return moment.astimezone(SWISS_TZ).isoformat(timespec="minutes")
+
+
+def _covered_range(series: Series, parameter: str) -> str:
+    """
+    Say which times a series actually covers.
+
+    The published window starts at a different hour for each parameter, so this is read off the
+    series rather than assumed, which keeps the message right for every tool.
+    """
+    return (
+        f"'{parameter}' covers {_swiss(min(series.values))} to "
+        f"{_swiss(max(series.values))} Swiss time."
+    )
+
+
+def _describe(code: int) -> str:
+    """Turn a MeteoSwiss pictogram code into the sentence it stands for."""
+    return PICTOGRAM_DESCRIPTIONS.get(code, f"unknown weather code {code}")
+
+
+def _compass_point(degrees: float) -> str:
+    """Name the compass point a bearing falls in, such as "SW" for 217 degrees."""
+    # The 16 points divide the circle into 22.5 degree sectors, so rounding lands on the nearest
+    sector = round(degrees / 22.5) % len(COMPASS_POINTS)
+    return COMPASS_POINTS[sector]
 
 
 class MeteoSwissPredictions:
-    def __init__(self):
-        # With a resolution of 1km we span an area of (7-1)*1km = 6km in x direction and (7-1)*1km = 6km in y direction
-        self.distance_offset_degree = self._calc_distance_offset_in_degree(num_grid_points_x=NUM_GRID_POINTS_X, num_grid_points_y=NUM_GRID_POINTS_Y, res_x_km=1, res_y_km=1) 
+    def __init__(self, cache_all_locations: bool = False):
+        self.forecast = LocalForecast(CACHE_DIR, cache_all_locations=cache_all_locations)
 
-        # Initielize nominatim geocoder
-        self.nominatim_user_agent = os.environ.get("NOMINATIM_USER_AGENT")
-        if not self.nominatim_user_agent:
+    async def _resolve(self, location: str) -> Point:
+        """Resolve a location name or postal code, off the event loop since it may download the table."""
+        return await asyncio.to_thread(self.forecast.resolve, location)
+
+    async def _series(self, parameter: str, point: Point) -> Series:
+        """Read one parameter for one point, off the event loop since it may download a large file."""
+        return await asyncio.to_thread(self.forecast.series, parameter, point)
+
+    def _value_at(self, series: Series, when: datetime, point: Point, parameter: str) -> float:
+        """Pick the forecast hour containing the requested time."""
+        hour = _utc_hour(when)
+        if hour not in series.values:
             raise ValueError(
-                "Nominatim user agent must be specified via the environment variable NOMINATIM_USER_AGENT."
+                f"{_swiss(when)} is outside the forecast for {point.label()}. "
+                f"{_covered_range(series, parameter)}"
             )
-        _setup_earthkit_cache()
-        # Initialize geocode cache to reduce geocoding API requests
-        self.geocode_cache = _load_geocode_cache()
+        return series.values[hour]
 
-    def _today_midnight_utc(self) -> datetime:
-        """
-        Return today's 00:00 UTC, the reference time the forecast run is anchored at.
-        """
-        return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    def _sum_between(self, series: Series, start: datetime, end: datetime, point: Point, parameter: str) -> float:
+        """Add up the hourly values from start up to, but not including, end."""
+        first_hour = _utc_hour(start)
+        last_hour = _utc_hour(end)
 
-    def _calc_distance_offset_in_degree(
-            self,
-            num_grid_points_x: int,
-            num_grid_points_y: int,
-            res_x_km: float, 
-            res_y_km: float
-        ) -> Tuple[float, float]:
+        total = 0.0
+        counted = 0
+        for hour, value in series.values.items():
+            if first_hour <= hour < last_hour:
+                total += value
+                counted += 1
+
+        if not counted:
+            raise ValueError(
+                f"{_swiss(start)} to {_swiss(end)} is outside the forecast for {point.label()}. "
+                f"{_covered_range(series, parameter)}"
+            )
+        return total
+
+    def _result(self, value: Any, unit: str, point: Point, run: datetime, **fields: Any) -> Dict[str, Any]:
         """
-        Calculate the distance offset from the middle point (e.g. for Zurich: lat=47.3744 lon=8.5410) in degrees for the given grid size and resolution.
+        Build the answer a tool returns.
+
+        The resolved point travels with the number because a name maps to many points, and in
+        Switzerland the altitude decides the weather as much as the place does.
+        """
+        result = {"value": value, "unit": unit, "location": point.label(), "altitude_m": point.height_masl}
+        result.update(fields)
+        result["model_run"] = f"{run:%Y-%m-%dT%H:%M}Z"
+        return result
+
+    async def _value_for_location(self, location: str, parameter: str, when: datetime, unit: str) -> Dict[str, Any]:
+        """
+        Read one parameter at one hour, the shape every point-in-time tool shares.
 
         Parameters:
-            num_grid_points_x (int): Number of points in the x (longitude) direction.
-            num_grid_points_y (int): Number of points in the y (latitude) direction.
-            res_x_km (float): Resolution of grid in kilometers along x.
-            res_y_km (float): Resolution of grid in kilometers along y.
+            location (str): Location name or postal code.
+            parameter (str): MeteoSwiss parameter shortname.
+            when (datetime): The forecast hour, timezone aware.
+            unit (str): Unit the returned value is expressed in.
 
         Returns:
-            Tuple[float, float]: Distance offsets in degrees (x_degree_offset, y_degree_offset).
-
-        See: https://github.com/MeteoSwiss/opendata-nwp-demos/blob/2ddfa03f4e3cfe3e57b0bf1696b62d9c5b61c2ad//computing_num_grid_points_x_num_grid_points_y.md
+            Dict[str, Any]: The value with the resolved point, the hour and the model run.
         """
-        # In central europe at 46° latitude, 1° in lattitude direction corresponds to 111.2 km in that direction.
-        # 1° of longitude corresponds to a smaller distance at 46° latitude due to the Earth's curvature and can be approximated by 111.2km * cos(46°)
-        km_per_degree_x = 111.2 * np.cos(np.radians(46))
-        km_per_degree_y = 111.2
+        point = await self._resolve(location)
+        series = await self._series(parameter, point)
+        value = self._value_at(series, when, point, parameter)
+        return self._result(value, unit, point, series.run, valid_at=_valid_at(when))
 
-        res_x_degree = res_x_km/km_per_degree_x
-        res_y_degree = res_y_km/km_per_degree_y
+    async def temp_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+        return await self._value_for_location(location, "tre200h0", when, "°C")
 
-        distance_offset_x_degree = (num_grid_points_x-1)/2 * res_x_degree
-        distance_offset_y_degree = (num_grid_points_y-1)/2 * res_y_degree
+    async def wind_speed_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+        return await self._value_for_location(location, "fu3010h0", when, "km/h")
 
-        return DistanceOffset(x=distance_offset_x_degree, y=distance_offset_y_degree)
+    async def wind_gusts_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+        return await self._value_for_location(location, "fu3010h1", when, "km/h")
 
-    async def _fetch_variable_over_period(
-        self,
-        location: str,
-        variable: str,
-        lead_time_start: int,
-        lead_time_end: int,
-        num_grid_points_x: int = NUM_GRID_POINTS_X,
-        num_grid_points_y: int = NUM_GRID_POINTS_Y,
-    ) -> DataArray:
+    async def freezing_level_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+        return await self._value_for_location(location, "zprfr0hs", when, "m above sea level")
+
+    async def precipitation_rate_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+        return await self._value_for_location(location, "rre150h0", when, "mm/h")
+
+    async def precipitation_probability_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+        return await self._value_for_location(location, "rp0003i0", when, "%")
+
+    async def wind_direction_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+        result = await self._value_for_location(location, "dkl010h0", when, "degrees")
+        result["compass_point"] = _compass_point(result["value"])
+        return result
+
+    async def weather_description_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+        point = await self._resolve(location)
+        series = await self._series("jww003i0", point)
+        code = int(self._value_at(series, when, point, "jww003i0"))
+        return self._result(
+            _describe(code), "description", point, series.run,
+            valid_at=_valid_at(when), pictogram_code=code,
+        )
+
+    async def total_rainfall_for_location(self, location: str, start: datetime, end: datetime) -> Dict[str, Any]:
+        point = await self._resolve(location)
+        series = await self._series("rre150h0", point)
+        total = self._sum_between(series, start, end, point, "rre150h0")
+        return self._result(round(total, 1), "mm", point, series.run,
+                            **{"from": _valid_at(start), "to": _valid_at(end)})
+
+    async def sunshine_hours_for_location(self, location: str, start: datetime, end: datetime) -> Dict[str, Any]:
+        point = await self._resolve(location)
+        series = await self._series("sre000h0", point)
+        minutes = self._sum_between(series, start, end, point, "sre000h0")
+        return self._result(round(minutes / 60, 1), "h", point, series.run,
+                            **{"from": _valid_at(start), "to": _valid_at(end)})
+
+    async def total_cloud_cover_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+        point = await self._resolve(location)
+        layers = {}
+        run = None
+        for name, parameter in (("low", "nprolohs"), ("medium", "npromths"), ("high", "nprohihs")):
+            series = await self._series(parameter, point)
+            layers[name] = self._value_at(series, when, point, parameter)
+            run = series.run
+
+        # The layers overlap, so they cannot simply be added. Assuming they are independent, the sky
+        # is clear only where all three are clear, which is the standard random overlap estimate.
+        clear = (1 - layers["low"]) * (1 - layers["medium"]) * (1 - layers["high"])
+        return self._result(
+            round((1 - clear) * 100, 1), "%", point, run,
+            valid_at=_valid_at(when),
+            low_percent=round(layers["low"] * 100, 1),
+            medium_percent=round(layers["medium"] * 100, 1),
+            high_percent=round(layers["high"] * 100, 1),
+        )
+
+    async def _daily_value(
+        self, parameter: str, point: Point, day: date
+    ) -> Tuple[Optional[float], Optional[datetime]]:
         """
-        Fetch meteorological data for a given location and variable over a forecast lead time period (UTC).
+        Read one daily parameter for one calendar day.
+
+        Not every location carries every daily parameter, the regional entries in particular, so a
+        missing one is reported as None instead of failing the whole summary.
 
         Parameters:
-            location (str): Name of the location.
-            variable (str): Parameter name (e.g., "TOT_PREC", "DURSUN").
-            lead_time_start (int): Start hour of the lead time period (0-120).
-            lead_time_end (int): End hour of the lead time period (1-120, lead_time_end ≥ lead_time_start).
-            num_grid_points_x (int): Grid dimension in the x (longitude) direction.
-            num_grid_points_y (int): Grid dimension in the y (latitude) direction.
+            parameter (str): MeteoSwiss parameter shortname (e.g., "tre200px").
+            point (Point): The resolved forecast point.
+            day (date): The Swiss calendar day wanted.
 
         Returns:
-            xarray.DataArray: Regridded raw data array covering the specified bounding box and lead time period.
+            Tuple[Optional[float], Optional[datetime]]: The value and the run it came from, or
+                (None, None) when MeteoSwiss does not publish it here.
         """
-        if not (0 <= lead_time_start <= 120):
-            raise ValueError(f"lead_time_start must be between 0 and 120, got {lead_time_start}")
-        if not (1 <= lead_time_end <= 120):
-            raise ValueError(f"lead_time_end must be between 1 and 120, got {lead_time_end}")
-        if lead_time_end <= lead_time_start:
-            raise ValueError(f"lead_time_end must be greater than lead_time_start, got lead_time_start={lead_time_start}, lead_time_end={lead_time_end}")
-        
-        # Calculate the grid bounding box around the location
-        location_lat, location_lon = await self._get_latlon_for_location(location)
-        x_min_deg = location_lon - self.distance_offset_degree.x
-        x_max_deg = location_lon + self.distance_offset_degree.x
-        y_min_deg = location_lat - self.distance_offset_degree.y
-        y_max_deg = location_lat + self.distance_offset_degree.y
-        
-        # Define lead times as timedelta objects to specify forecast hours range
-        lead_times = [timedelta(hours=lead_time_start), timedelta(hours=lead_time_end)]
-
-        # Build the API request for given variable and lead time period, using ensemble perturbations (perturbed=True)
-        req = ogd_api.Request(
-            collection="ogd-forecasting-icon-ch2",
-            variable=variable,
-            ref_time=self._today_midnight_utc(),
-            lead_time=lead_times,
-            perturbed=True,       
-        )
-
-        # Fetch raw weather data array from MeteoSwiss API
         try:
-            raw_data = await asyncio.to_thread(ogd_api.get_from_ogd, req)
-        except Exception as e:
-            raise RuntimeError(f"Error fetching data from MeteoSwiss API: {e}") from e
+            series = await self._series(parameter, point)
+        except ValueError as error:
+            logger.info(f"daily_forecast: no {parameter} for {point.label()}: {error}")
+            return None, None
 
-        # Regrid raw data from ICON grid onto regular lon/lat grid
-        target_grid = regrid.RegularGrid(CRS.from_epsg(4326), num_grid_points_x, num_grid_points_y, x_min_deg, x_max_deg, y_min_deg, y_max_deg)
-        remapped_data = await asyncio.to_thread(regrid.iconremap, raw_data, target_grid)
+        # Daily rows are stamped at midnight UTC, which is the same calendar day in Switzerland
+        for measured_at, value in series.values.items():
+            if measured_at.date() == day:
+                return value, series.run
 
-        return remapped_data
-    
-    async def _fetch_variable_at_lead_time(
-        self,
-        location: str,
-        variable: str,
-        lead_time: int,
-        num_grid_points_x: int = NUM_GRID_POINTS_X,
-        num_grid_points_y: int = NUM_GRID_POINTS_Y,
-    ) -> DataArray:
+        logger.info(f"daily_forecast: {parameter} does not reach {day} for {point.label()}")
+        return None, series.run
+
+    async def daily_forecast_for_location(self, location: str, date: datetime) -> Dict[str, Any]:
         """
-        Fetch meteorological data for a given location and variable for a specific
-        forecast lead time (UTC).
+        Read the whole-day summary for a location.
+
+        The daily parameters answer this far more cheaply than the hourly ones: six daily files are
+        about 7 MB together, where the hourly equivalent is about 124 MB.
 
         Parameters:
-            location (str): Name of the location.
-            variable (str): Parameter name (e.g., "T_2M", "U_10M").
-            lead_time (int): Forecast lead time in hours (1-120).
-            num_grid_points_x (int): Grid dimension in the x (longitude) direction.
-            num_grid_points_y (int): Grid dimension in the y (latitude) direction.
+            location (str): Location name or postal code.
+            date (datetime): Any moment on the day wanted, timezone aware.
 
         Returns:
-            xarray.DataArray: Regridded raw data array for the specified bounding box and lead time.
+            Dict[str, Any]: Minimum and maximum temperature, rainfall with its 10% and 90% range, a
+                worded summary, the resolved point and the model run. Fields MeteoSwiss does not
+                publish for this location are None.
         """
-        if not (0 <= lead_time <= 120):
-            raise ValueError(f"lead_time must be between 0 and 120, got {lead_time}")
-        
-        # Calculate the grid bounding box around the location
-        location_lat, location_lon = await self._get_latlon_for_location(location)
-        x_min_deg = location_lon - self.distance_offset_degree.x
-        x_max_deg = location_lon + self.distance_offset_degree.x
-        y_min_deg = location_lat - self.distance_offset_degree.y
-        y_max_deg = location_lat + self.distance_offset_degree.y
+        point = await self._resolve(location)
+        day = date.astimezone(SWISS_TZ).date()
 
-        # Build the API request for the variable at the specific lead time, using ensemble perturbations (perturbed=True)
-        req = ogd_api.Request(
-            collection="ogd-forecasting-icon-ch2",
-            variable=variable,
-            ref_time=self._today_midnight_utc(),
-            lead_time=timedelta(hours=lead_time),
-            perturbed=True,
-        )
+        summary: Dict[str, Any] = {
+            "location": point.label(),
+            "altitude_m": point.height_masl,
+            "date": day.isoformat(),
+        }
 
-        # Fetch raw data array from MeteoSwiss API
-        try:
-            raw_data = await asyncio.to_thread(ogd_api.get_from_ogd, req)
-        except Exception as e:
-            raise RuntimeError(f"Error fetching data from MeteoSwiss API: {e}") from e
+        run: Optional[datetime] = None
+        for field, parameter in DAILY_PARAMETERS:
+            value, parameter_run = await self._daily_value(parameter, point, day)
+            run = parameter_run or run
+            summary[field] = value
 
-        # Regrid raw data from ICON grid onto regular lon/lat grid
-        target_grid = regrid.RegularGrid(CRS.from_epsg(4326), num_grid_points_x, num_grid_points_y, x_min_deg, x_max_deg, y_min_deg, y_max_deg)
-        remapped_data = await asyncio.to_thread(regrid.iconremap, raw_data, target_grid)
+        if run is None:
+            raise ValueError(f"MeteoSwiss publishes no daily forecast for {point.label()}, try a nearby town.")
 
-        return remapped_data
-    
-    async def _get_latlon_for_location(self, location_name: str) -> Tuple[float, float]:
-        if location_name in self.geocode_cache:
-            lat, lon = self.geocode_cache[location_name]
-            return lat, lon        
+        # The pictogram is published as a code, which is only useful once it is spelled out
+        if summary["weather"] is not None:
+            summary["pictogram_code"] = int(summary["weather"])
+            summary["weather"] = _describe(summary["pictogram_code"])
 
-        geolocator = Nominatim(user_agent=self.nominatim_user_agent, timeout=GEOCODE_TIMEOUT_SECONDS)
-        try:
-            location = await asyncio.to_thread(geolocator.geocode, location_name + ", Switzerland")
-        except GeocoderInsufficientPrivileges as e:
-            raise RuntimeError(f"Nominatim denied the request for location {location_name}, either NOMINATIM_USER_AGENT does not identify a real application and contact address, or the request rate exceeded the usage policy: {e}") from e
-        except Exception as e:
-            raise RuntimeError(f"Error during geocoding for location {location_name}: {e}") from e
-        if location is None:
-            raise ValueError(f"Could not find location: {location_name}")
-
-        # Update geocode cache and write updated cache to disk atomically
-        self.geocode_cache[location_name] = (location.latitude, location.longitude)
-        _save_geocode_cache(self.geocode_cache)
-            
-        return (location.latitude, location.longitude)
-
-    async def total_rainfall_for_location(self, location: str, lead_time_start: int, lead_time_end: int) -> float:
-        precip_raw = await self._fetch_variable_over_period(
-            location=location,
-            variable="TOT_PREC",
-            lead_time_start=lead_time_start,
-            lead_time_end=lead_time_end,
-        )
-        
-        # Difference of the variable values over the lead time period (lead_time_end - lead_time_start) 
-        precip_diff = precip_raw.diff(dim="lead_time")
-
-        # Average over ensemble dimensions
-        precip_eps_mean = precip_diff.mean(dim="eps")
-        # Average over spatial dimensions (y and x) 
-        precipation_yx_mean = precip_eps_mean.mean(dim=["y", "x"])
-        precip_mm = float(precipation_yx_mean.item())
-        return precip_mm 
-    
-    async def sunshine_hours_for_location(self, location: str, lead_time_start: int, lead_time_end: int) -> float:
-        sunshine_raw = await self._fetch_variable_over_period(
-            location=location,
-            variable="DURSUN",
-            lead_time_start=lead_time_start,
-            lead_time_end=lead_time_end,
-        )
-
-        # Difference of the variable values over the lead time period (lead_time_end - lead_time_start)
-        sunshine_diff = sunshine_raw.diff(dim="lead_time")
-
-        # Average over ensemble dimensions
-        sunshine_eps_mean = sunshine_diff.mean(dim="eps")
-        # Average over spatial dimensions (y and x)
-        sunshine_yx_mean= sunshine_eps_mean.mean(dim=["y", "x"])
-        sunshine_hours = float(sunshine_yx_mean.item())/ 3600  
-        return sunshine_hours
-
-    async def wind_speed_for_location(self, location:str, lead_time: int) -> float:
-        wind_speed_raw_u = await self._fetch_variable_at_lead_time(
-            location=location,
-            variable="U_10M",
-            lead_time=lead_time
-        )
-
-        wind_speed_raw_v = await self._fetch_variable_at_lead_time(
-            location=location,
-            variable="V_10M",
-            lead_time=lead_time
-        )
-
-        wind_speed_raw = np.sqrt(wind_speed_raw_u**2 + wind_speed_raw_v**2)
-
-         # Average over ensemble dimension
-        wind_speed_eps_mean = wind_speed_raw.mean(dim="eps")
-        # Average over spatial dimensions (y and x)
-        wind_speed_yx_mean = wind_speed_eps_mean.mean(dim=["y", "x"])
-        wind_speed_mps = float(wind_speed_yx_mean.item())
-
-        return wind_speed_mps
-
-    async def temp_for_location(self, location: str, lead_time: int) -> float:
-        temp_raw = await self._fetch_variable_at_lead_time(
-            location=location,
-            variable="TMAX_2M",
-            lead_time=lead_time,
-        )
-        # Average over ensemble dimensions 
-        temp_eps_mean =temp_raw.mean(dim="eps")
-        # Avarage over spatial dimensions (y and x)
-        temp_yx_mean = temp_eps_mean.mean(dim=["y", "x"])
-        temp_K = float(temp_yx_mean.item())
-        temp_C = temp_K - 273.15
-        return temp_C
-    
-    async def pressure_msl_for_location(self, location: str, lead_time: int) -> float:
-        pressure_msl_raw = await self._fetch_variable_at_lead_time(
-            location=location,
-            variable="PMSL",
-            lead_time=lead_time,
-        )
-        # Average over ensamble dimensions
-        pressure_msl_eps_mean = pressure_msl_raw.mean(dim="eps")
-        # Average over spatial dimensions (y and x) 
-        pressure_msl_yx_mean = pressure_msl_eps_mean.mean(dim=["y", "x"]) 
-        pressure_msl_Pa = float(pressure_msl_yx_mean.item())
-        return pressure_msl_Pa
-
-    async def total_cloud_cover_for_location(self, location: str, lead_time: int) -> float:
-        cloud_raw = await self._fetch_variable_at_lead_time(
-            location=location,
-            variable="CLCT",
-            lead_time=lead_time,
-        )
-        # Average over ensemble dimensions
-        cloud_eps_mean = cloud_raw.mean(dim="eps")
-        # Average over spatial dimensions (y and x) 
-        cloud_yx_mean = cloud_eps_mean.mean(dim=["y", "x"])
-        cloud_percent = float(cloud_yx_mean.item())
-        return cloud_percent
-
-    async def snow_depth_for_location(self, location: str, lead_time: int) -> float:
-        snow_raw = await self._fetch_variable_at_lead_time(
-            location=location,
-            variable="H_SNOW",
-            lead_time=lead_time,
-        )
-        # Average over ensemble dimensions
-        snow_eps_mean = snow_raw.mean(dim="eps")
-        # Averge over spatial dimensions (y and x) 
-        snow_yx_mean = snow_eps_mean.mean(dim=["y", "x"])
-        snow_m = float(snow_yx_mean.item())
-        return snow_m
-
-    async def total_precipitation_rate_for_location(self, location: str, lead_time: int) -> float:
-        precip_raw = await self._fetch_variable_at_lead_time(
-            location=location,
-            variable="TOT_PR",
-            lead_time=lead_time,
-        )
-        # Average over ensemble dimensions
-        precip_eps_mean = precip_raw.mean(dim="eps")
-        # Average over spatial dimensions (y and x)
-        precip_yx_mean = precip_eps_mean.mean(dim=["y", "x"])
-        precip_mm_per_sec = float(precip_yx_mean.item())
-        return precip_mm_per_sec
+        summary["model_run"] = f"{run:%Y-%m-%dT%H:%M}Z"
+        return summary
