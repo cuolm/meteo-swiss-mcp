@@ -5,16 +5,6 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /bin/
 
 WORKDIR /app
 
-# Install system libraries required by rasterio/pyproj (GDAL) and meteodata-lab (ecCodes)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential \
-        gdal-bin \
-        libgdal-dev \
-        libeccodes0 \
-        libeccodes-dev && \
-    rm -rf /var/lib/apt/lists/*
-
 # ARG accepts dynamic versions from CI/CD (e.g., --build-arg BUILD_VERSION=1.2.0).
 # Defaults to "0.0.0" for local builds.
 ARG BUILD_VERSION=0.0.0
