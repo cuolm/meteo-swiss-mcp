@@ -5,7 +5,7 @@
 [![Tests](https://github.com/cuolm/swiss-weather-mcp/actions/workflows/tests.yaml/badge.svg)](https://github.com/cuolm/swiss-weather-mcp/actions/workflows/tests.yaml)
 
 A **Model Context Protocol ([MCP](https://modelcontextprotocol.info/))** server that exposes Swiss weather forecast data as callable tools.
-It fetches data from the official [MeteoSwiss](https://opendatadocs.meteoswiss.ch/e-forecast-data/e2-e3-numerical-weather-forecasting-model) [meteodata-lab](https://meteoswiss.github.io/meteodata-lab/), caches it locally, and serves predictions such as rainfall, sunshine, temperature, etc. The prediction data is from the [ICON-CH2-EPS](https://www.meteoswiss.admin.ch/weather/warning-and-forecasting-systems/icon-forecasting-systems.html) forecast system that produces data for up to 5 days ahead.
+It reads the official [MeteoSwiss local forecast collection](https://opendatadocs.meteoswiss.ch/e-forecast-data/e4-local-forecast-data), caches it locally, and serves predictions such as rainfall, sunshine, temperature, wind and a worded weather summary. MeteoSwiss publishes these forecasts for **5,614 Swiss locations** (weather stations, postal code areas and points of interest), **9 days ahead**, refreshed **every hour**.
 
 Additionally there is also an MCP client that can be run to test the server using the stdio transport.
 
@@ -16,7 +16,6 @@ Additionally there is also an MCP client that can be run to test the server usin
 - [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
-- [Configuration](#configuration)
 - [Usage](#usage)
 - [Available Tools](#available-tools)
 - [Example Usage with LMStudio](#example-usage-with-lmstudio)
@@ -30,14 +29,14 @@ Additionally there is also an MCP client that can be run to test the server usin
 swiss-weather-mcp/
 ├── src/swiss_weather_mcp/
 │   ├── server.py           # MCP server
-│   ├── predictions.py      # Data fetching logic
+│   ├── predictions.py      # Weather values, units and aggregation
+│   ├── localforecast.py    # MeteoSwiss data source, caching and location lookup
 │   └── client.py           # MCP client (optional)
 ├── tests/swiss_weather_mcp/  # Pytest suite
 ├── .github/workflows/      # CI and release pipelines
 ├── docs/                   # Documentation
 ├── pyproject.toml          # Project metadata and dependencies
 ├── uv.lock                 # Pinned, reproducible dependency set
-├── .env                    # NOMINATIM_USER_AGENT (not committed)
 └── Dockerfile
 ```
 Caches live outside the project, under your OS's standard cache directory (see [Installation](#installation)).
@@ -50,17 +49,11 @@ Install the server globally to run it anywhere on your system:
 uv tool install swiss-weather-mcp
 ```
 
-### 2. Configuration
-Create a `.env` file with your Nominatim user agent (see [Configuration](#configuration)):
-```bash
-echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
-```
-
-### 3. Execution
-Run the server from the directory containing your `.env` file:
+### 2. Execution
 ```bash
 swiss-weather-mcp-server
 ```
+No configuration is needed, the server reads everything it requires from MeteoSwiss.
 
 ## Installation
 
@@ -105,29 +98,10 @@ pip install -e ".[client]"
 > **Note:**
 > - `llama-server` must already be running when you start `swiss-weather-mcp-client`, which talks to it
 >   but never starts it. The MCP server itself does not need it.
-> - The `.env` file is read from the **current working directory**, so run the server from the directory
->   holding it. Exporting `NOMINATIM_USER_AGENT` works when you start the server yourself, but not
->   through `swiss-weather-mcp-client`: the MCP stdio transport forwards only a fixed list of variables.
-> - A `.env` file is read only by the two entry points, not when the package is imported as a library.
->   `MeteoSwissPredictions` takes `NOMINATIM_USER_AGENT` from the environment, and the calling
->   application decides how it gets there.
 > - Caches live in your OS cache directory (via [platformdirs](https://github.com/tox-dev/platformdirs),
 >   e.g. `~/Library/Caches/swiss-weather-mcp` on macOS, `~/.cache/swiss-weather-mcp` on Linux),
->   independent of where the server runs, so forecasts and geocoded locations are reused. Delete
->   `EarthKitCache/` or `nominatim_geocode_cache.json` to clear them.
-
-## Configuration
-
-Create a `.env` file in the directory you'll run the server from, specifying an environment variable that tells Nominatim (the geocoding service) who is making the call.
-
-```bash
-echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
-```
-
-> **Note:** Replace the name and address with your own. The
-> [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/) requires a user
-> agent identifying a real application and contact address, and blocks requests without one. Keep
-> lookups to at most one per second. Results are cached, so only new locations reach the service.
+>   independent of where the server runs. Set `SWISS_WEATHER_MCP_CACHE_DIR` to put them elsewhere, or
+>   delete the directory to clear them.
 
 ## Usage
 
@@ -151,26 +125,29 @@ swiss-weather-mcp-server
 ```
 Optional flags: `--help`
 
+> **Note:** By default the server keeps only the rows for the location you asked about, a few
+> kilobytes per parameter. Pass `--cache-all-locations` to keep the whole published file instead
+> (about 31 MB per parameter), which makes questions about further locations need no new download.
+
 ### Running the Server with Docker
 Images are built and published automatically by GitHub Actions to the project's [GitHub Container Registry](https://ghcr.io/cuolm/swiss-weather-mcp), tagged `:latest` (newest release) and by version.
 
-1. Create a `.env` file containing your Nominatim user agent environment variable (replace `"YourWeatherMCPServer/1.0 (yourname@example.com)"`):
+1. Run the published image, mapping port 8050:
    ```bash
-   echo 'NOMINATIM_USER_AGENT="YourWeatherMCPServer/1.0 (yourname@example.com)"' > .env
+   docker run -p 8050:8050 ghcr.io/cuolm/swiss-weather-mcp:latest
    ```
-2. Run the published image, passing the `.env` file and mapping port 8050:
-   ```bash
-   docker run --env-file .env -p 8050:8050 ghcr.io/cuolm/swiss-weather-mcp:latest
-   ```
-3. Access the server at:
+2. Access the server at:
    ```bash
    http://localhost:8050/mcp/
    ```
 
+> **Note:** The cache lives inside the container and is lost when it stops. Mount a volume to keep it
+> across restarts, for example `-v swiss-weather-cache:/root/.cache/swiss-weather-mcp`.
+
 #### Manual Build
 ```bash
 docker build -t swiss-weather-mcp .
-docker run --env-file .env -p 8050:8050 swiss-weather-mcp
+docker run -p 8050:8050 swiss-weather-mcp
 ```
 
 ### Running the MCP Client using Stdio Transport
@@ -200,22 +177,42 @@ The bundled MCP client can be used to test the server over the stdio transport. 
 
 ## Available Tools
 
+All tools take a `location` (a name such as `"Zurich"`, or a Swiss postal code such as `"8001"`) and a
+Swiss local timestamp. Every tool returns the value together with the location it resolved, its
+altitude, the time it applies to, and the model run the forecast came from.
+
 | Tool | Purpose | Example Call |
 |------|---------|--------------|
-| `current_date_and_time()` | Current date and time (weekday day.month.year hour:minute:second) in Swiss local time | `current_date_and_time()` |
-| `total_rainfall(location, lead_time_start_swiss, lead_time_end_swiss)` | Total rainfall (mm) for a period | `total_rainfall("Zurich", 24, 48)` |
-| `sunshine_hours(location, lead_time_start_swiss, lead_time_end_swiss)` | Sunshine hours for a period | `sunshine_hours("Zurich", 24, 48)` |
-| `temperature(location, lead_time_swiss)` | Max temperature (°C) at a specific lead time | `temperature("Zurich", 36)` |
-| `wind_speed(location, lead_time_swiss)` | Wind speed (m/s) at a specific lead time | `wind_speed("Zurich", 36)` |
-| `pressure_msl(location, lead_time_swiss)` | Sea‑level pressure (Pa) at a specific lead time | `pressure_msl("Zurich", 36)` |
-| `total_cloud_cover(location, lead_time_swiss)` | Cloud cover (%) at a specific lead time | `total_cloud_cover("Zurich", 36)` |
-| `snow_depth(location, lead_time_swiss)` | Snow depth (m) at a specific lead time | `snow_depth("Zurich", 36)` |
-| `precipitation_rate(location, lead_time_swiss)` | Precipitation rate (mm/s) at a specific lead time | `precipitation_rate("Zurich", 36)` |
+| `current_date_and_time()` | Current date and time in Swiss local time | `current_date_and_time()` |
+| `daily_forecast(location, date)` | Whole day: min/max temperature, rainfall with its 10–90% range, worded summary | `daily_forecast("Zurich", "2026-09-23")` |
+| `weather_description(location, when)` | The weather in words, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
+| `temperature(location, when)` | Air temperature (°C), hourly mean 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
+| `total_rainfall(location, start, end)` | Rainfall (mm) summed over a period | `total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
+| `sunshine_hours(location, start, end)` | Sunshine (h) summed over a period | `sunshine_hours("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
+| `precipitation_probability(location, when)` | Chance of rain (%) over a 3-hour window | `precipitation_probability("Zurich", "2026-09-23T14:00")` |
+| `precipitation_rate(location, when)` | Rainfall (mm) during that hour | `precipitation_rate("Zurich", "2026-09-23T14:00")` |
+| `wind_speed(location, when)` | Wind speed (km/h), hourly mean | `wind_speed("Zurich", "2026-09-23T14:00")` |
+| `wind_gusts(location, when)` | Strongest one-second gust (km/h) in that hour | `wind_gusts("Säntis", "2026-09-23T14:00")` |
+| `wind_direction(location, when)` | Direction the wind blows from, in degrees and as a compass point | `wind_direction("Zurich", "2026-09-23T14:00")` |
+| `total_cloud_cover(location, when)` | Cloud cover (%) plus the low, medium and high layers | `total_cloud_cover("Zurich", "2026-09-23T14:00")` |
+| `freezing_level(location, when)` | Height of the 0 °C line (m above sea level) | `freezing_level("Zermatt", "2026-09-23T14:00")` |
 
-**Lead Time**
-- Lead time is the number of hours counted from Swiss local time 00:00, internally converted to UTC (the ICON-CH2-EPS forecast system uses UTC).
-- Example: A lead time of 36 hours returns the forecast for 12:00 Swiss local time tomorrow.
-- Minimum lead time: 2 hours, maximum lead time: 121 hours.
+**Time**
+- Timestamps are ISO and read as Swiss local time, e.g. `"2026-09-23T14:00"`. An explicit offset is honoured.
+- Periods run from `start` up to, but not including, `end`.
+- The forecast reaches about 9 days ahead from the newest run, so the window shrinks slightly as the day goes on.
+
+> **Note:** Ask `current_date_and_time()` first when the question is relative, such as "tomorrow" or
+> "tonight", because the tools take a real date rather than an offset.
+
+> **Note:** A location must be one of the places MeteoSwiss publishes. Names are matched exactly,
+> ignoring case and accents, so `zurich` finds `Zürich` but a region such as `Tessin` does not match
+> and is rejected rather than guessed at. A city covers several postal code areas and resolves to the
+> lowest one, its historic centre, which is why the answer names the point it used.
+
+> **Note:** `daily_forecast` is by far the cheapest tool, roughly 7 MB against about 31 MB per hourly
+> parameter, so prefer it when the question is about a day rather than an hour. `total_cloud_cover`
+> is the most expensive because it reads three files.
 
 ## Example Usage with LMStudio
 
@@ -270,7 +267,7 @@ Both publish jobs use PyPI [trusted publishing](https://docs.pypi.org/trusted-pu
 
 ## Resources
 - [Meteo Swiss Open Data](https://www.meteoswiss.admin.ch/services-and-publications/service/open-data.html)
-- [Jupyter Notebook Examples](https://github.com/MeteoSwiss/opendata-nwp-demos/tree/main)
+- [Local Forecast Notebook Examples](https://github.com/MeteoSwiss/opendata-localforecast-demos)
 - [Model Context Protocol](https://github.com/modelcontextprotocol/python-sdk)
 - [MCP Server Quickstart](https://modelcontextprotocol.info/docs/quickstart/server/)
 
