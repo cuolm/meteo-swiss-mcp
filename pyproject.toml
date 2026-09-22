@@ -5,8 +5,8 @@ build-backend = "hatchling.build"
 [project]
 name = "swiss-weather-mcp"
 dynamic = ["version", "readme"]
-description = "MCP server exposing MeteoSwiss ICON-CH2-EPS weather forecasts for Switzerland as callable tools"
-requires-python = ">=3.11,<3.13"
+description = "MCP server exposing MeteoSwiss local weather forecasts for Switzerland as callable tools"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICEN[CS]E*"]
 authors = [
@@ -16,21 +16,14 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: Apache Software License",
     "Typing :: Typed",
 ]
 dependencies = [
-    "earthkit-data>=0.10.0",
-    "geopy>=2.4.1",
     "mcp>=1.13.1,<2",  # mcp 2.x renames FastMCP to MCPServer and changes the tool API
-    "meteodata-lab>=0.4.0",
-    "numpy>=1.26.4,<2",
     "platformdirs>=4.11.4",
-    "pyproj>=3.7.2",
-    "python-dotenv>=1.1.1",
-    "rasterio>=1.4.3",
     "requests>=2.32.0",
-    "scipy>=1.16.1",
 ]
 
 [project.optional-dependencies]
