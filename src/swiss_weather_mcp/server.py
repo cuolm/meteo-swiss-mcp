@@ -1,15 +1,17 @@
 import argparse
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
-from dotenv import find_dotenv, load_dotenv
+
 from mcp.server.fastmcp import FastMCP
 
 from . import LOG_LEVELS, setup_logging
 from .predictions import MeteoSwissPredictions
 
 logger = logging.getLogger(__name__)
+
+SWISS_TZ = ZoneInfo("Europe/Zurich")
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MCP Server")
@@ -22,6 +24,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="localhost", help="Server host (used only for HTTP)")
     parser.add_argument("--port", type=int, default=8050, help="Server port (used only for HTTP)")
     parser.add_argument(
+        "--cache-all-locations",
+        action="store_true",
+        help="Keep the whole published file (about 31 MB per parameter) instead of only the rows "
+             "for the requested location, so questions about further locations need no download",
+    )
+    parser.add_argument(
         "--log-level",
         type=str,
         default="INFO",
@@ -30,36 +38,27 @@ def _parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-def _lead_time_swiss_to_utc(lead_time_swiss: int) -> int:
+def _parse_swiss_time(value: str) -> datetime:
     """
-    Convert a lead time expressed in Swiss local hours since Swiss midnight
-    into the equivalent lead time in hours since today's 00:00 UTC.
+    Read an ISO timestamp as Swiss local time.
 
-    The forecast API counts lead times from 00:00 UTC (MeteoSwissPredictions passes it
-    as ref_time), so the Swiss lead time has to be re-expressed against that anchor.
+    The forecast rows carry a real timestamp, so the tools take one too. A value without a
+    timezone is read as Europe/Zurich, which is how the caller asked the question, and an
+    explicit offset is honoured as given.
 
-    Handles DST (daylight saving time) transitions correctly by using timezone-aware datetimes.
+    Parameters:
+        value (str): ISO timestamp, e.g. "2026-09-23T14:00", or a date, e.g. "2026-09-23".
+
+    Returns:
+        datetime: The same instant, timezone aware.
     """
-    if lead_time_swiss < 0:
-        raise ValueError(f"lead_time_swiss must be a non-negative value, got {lead_time_swiss}")
-
-    now_swiss_datetime = datetime.now(ZoneInfo("Europe/Zurich"))
-
-    # Midnight in Swiss local time (today)
-    midnight_swiss_datetime = now_swiss_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
-
-    # Target time in Swiss local time
-    target_time_swiss_datetime = midnight_swiss_datetime + timedelta(hours=lead_time_swiss)
-
-    # Midnight in UTC (today), the anchor the forecast API counts lead times from
-    midnight_utc_datetime = now_swiss_datetime.astimezone(ZoneInfo("UTC")).replace(hour=0, minute=0, second=0, microsecond=0)
-
-    # Target time as a UTC instant
-    target_time_utc_datetime = target_time_swiss_datetime.astimezone(ZoneInfo("UTC"))
-
-    # Compute difference in hours
-    lead_time_utc = (target_time_utc_datetime - midnight_utc_datetime).total_seconds() // 3600
-    return int(lead_time_utc)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(
+            f"'{value}' is not a valid timestamp, use for example '2026-09-23T14:00' or '2026-09-23'"
+        ) from error
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=SWISS_TZ)
 
 
 class MeteoSwissMCPServer:
@@ -69,14 +68,14 @@ class MeteoSwissMCPServer:
         self.transport = args.transport
         self.mcp = FastMCP(
             name="swiss_weather_mcp_server",
-            instructions="This MCP server provides hourly weather forecast data for Switzerland for up to 5 days ahead.",
+            instructions="This MCP server provides hourly weather forecast data for Switzerland for up to 9 days ahead.",
             host=self.host,
             port=self.port,
             stateless_http=True,
             log_level=args.log_level,  # forwarded to uvicorn, which configures its own loggers
         )
 
-        self.meteo = MeteoSwissPredictions()
+        self.meteo = MeteoSwissPredictions(cache_all_locations=args.cache_all_locations)
         self._register_tools()
 
     def _register_tools(self) -> None:
@@ -85,254 +84,363 @@ class MeteoSwissMCPServer:
             """
             Get a human-readable string of the current time, weekday and date.
 
+            Call this first when the question is relative, such as "tomorrow" or "tonight", because
+            the forecast tools take a real date rather than an offset.
+
             Returns:
                 str: A string in the format "Today is <weekday> <day>.<month>.<year> <hour>:<minute>:<second>"
             """
-            switzerland = ZoneInfo("Europe/Zurich")
-            now_in_ch = datetime.now(switzerland)
+            now_in_ch = datetime.now(SWISS_TZ)
             formatted_date_time = now_in_ch.strftime("%A %d.%m.%Y %H:%M:%S")
             return f"Today is {formatted_date_time}"
 
         @self.mcp.tool()
-        async def total_rainfall(location: str, lead_time_start_swiss: int, lead_time_end_swiss: int) -> float:
+        async def daily_forecast(location: str, date: str) -> dict:
             """
-            Get total rainfall for a location and offset period.
+            Get the whole-day summary for a location: the cheapest way to answer "how is the weather".
+
+            Prefer this over several hourly tools when the question is about a day rather than an
+            hour. The values cover a Swiss calendar day, 00:00 to 24:00 local time.
 
             Args:
-                location (str): Location name (e.g., "Zurich").
-                lead_time_start_swiss (int): Start hour offset from today at 00:00 Swiss local time. Min offset time is 2 hours.
-                lead_time_end_swiss (int): End hour offset from today at 00:00 Swiss local time. Max offset time is 121 hours.
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                    Must be a place MeteoSwiss publishes forecasts for.
+                date (str): The day, e.g. "2026-09-23". Up to 9 days ahead.
 
             Returns:
-                float: Total precipitation accumulation in millimeters for the given period.
+                dict: Minimum and maximum temperature in Celsius, total rainfall in millimetres with
+                    its 10% and 90% range, a worded weather summary, the resolved location with its
+                    altitude, and the model run. A value is None when MeteoSwiss does not publish it
+                    for that location.
 
             Examples:
-                total_rainfall("Zurich", 2, 24)    # Total rainfall today
-                total_rainfall("Zurich", 24, 48)   # Total rainfall tomorrow
-                total_rainfall("Zurich", 24, 30)   # Total rainfall tonight
-                total_rainfall("Zurich", 30, 36)   # Total rainfall tomorrow morning
-                total_rainfall("Zurich", 36, 42)   # Total rainfall tomorrow afternoon
-                total_rainfall("Zurich", 42, 48)   # Total rainfall tomorrow evening
+                daily_forecast("Zurich", "2026-09-23")
+                daily_forecast("8001", "2026-09-25")
             """
             try:
-                if lead_time_start_swiss >= lead_time_end_swiss:
-                    raise ValueError(
-                        f"lead_time_start_swiss must be less than lead_time_end_swiss, "
-                        f"got lead_time_start_swiss={lead_time_start_swiss}, lead_time_end_swiss={lead_time_end_swiss}"
-                    )
-                lead_time_start_utc = _lead_time_swiss_to_utc(lead_time_start_swiss)
-                lead_time_end_utc = _lead_time_swiss_to_utc(lead_time_end_swiss)
+                result = await self.meteo.daily_forecast_for_location(location, _parse_swiss_time(date))
+                logger.info(f"daily_forecast: location={location}, date={date}, result={result}")
+                return result
+            except Exception as error:
+                logger.exception(f"Failed to get the daily forecast for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get the daily forecast for location '{location}': {error}") from error
+
+        @self.mcp.tool()
+        async def weather_description(location: str, when: str) -> dict:
+            """
+            Get the weather in words for a location at a specific time.
+
+            The description covers the three hours up to the given time, and reads like
+            "mostly sunny, some clouds" or "very cloudy, light rain".
+
+            Args:
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                when (str): Swiss local time, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+
+            Returns:
+                dict: The description, the MeteoSwiss pictogram code behind it, the resolved
+                    location with its altitude, the time it is valid for, and the model run.
+
+            Examples:
+                weather_description("Zurich", "2026-09-23T14:00")
+                weather_description("Davos", "2026-09-24T08:00")
+            """
+            try:
+                result = await self.meteo.weather_description_for_location(location, _parse_swiss_time(when))
+                logger.info(f"weather_description: location={location}, when={when}, result={result}")
+                return result
+            except Exception as error:
+                logger.exception(f"Failed to get the weather description for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get the weather description for location '{location}': {error}") from error
+
+        @self.mcp.tool()
+        async def temperature(location: str, when: str) -> dict:
+            """
+            Get the air temperature for a location at a specific time.
+
+            This is the mean over that hour, 2 metres above ground. For a day's highest and lowest
+            temperature use daily_forecast instead.
+
+            Args:
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                when (str): Swiss local time, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+
+            Returns:
+                dict: Temperature in Celsius, the resolved location with its altitude, the time it
+                    is valid for, and the model run.
+
+            Examples:
+                temperature("Zurich", "2026-09-23T14:00")
+                temperature("Zermatt", "2026-09-25T07:00")
+            """
+            try:
+                result = await self.meteo.temp_for_location(location, _parse_swiss_time(when))
+                logger.info(f"temperature: location={location}, when={when}, result={result}")
+                return result
+            except Exception as error:
+                logger.exception(f"Failed to get temperature for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get temperature for location '{location}': {error}") from error
+
+        @self.mcp.tool()
+        async def total_rainfall(location: str, start: str, end: str) -> dict:
+            """
+            Get the total rainfall for a location over a period.
+
+            The hourly amounts are added up from start up to, but not including, end.
+
+            Args:
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                start (str): Swiss local time the period starts, e.g. "2026-09-23T06:00".
+                end (str): Swiss local time the period ends, e.g. "2026-09-23T18:00".
+
+            Returns:
+                dict: Rainfall in millimetres, the resolved location with its altitude, the period,
+                    and the model run.
+
+            Examples:
+                total_rainfall("Zurich", "2026-09-23T00:00", "2026-09-24T00:00")   # the whole day
+                total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T12:00")   # the morning
+            """
+            try:
                 result = await self.meteo.total_rainfall_for_location(
-                    location,
-                    lead_time_start_utc,
-                    lead_time_end_utc
+                    location, _parse_swiss_time(start), _parse_swiss_time(end)
                 )
-                logger.info(f"total_rainfall: location={location}, lead_time_start_swiss={lead_time_start_swiss}, lead_time_end_swiss={lead_time_end_swiss}, result={result}")
+                logger.info(f"total_rainfall: location={location}, start={start}, end={end}, result={result}")
                 return result
-            except Exception as e:
-                logger.exception(f"Failed to get total rainfall for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get total rainfall for location '{location}': {e}") from e
+            except Exception as error:
+                logger.exception(f"Failed to get total rainfall for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get total rainfall for location '{location}': {error}") from error
 
         @self.mcp.tool()
-        async def sunshine_hours(location: str, lead_time_start_swiss: int, lead_time_end_swiss: int) -> float:
+        async def sunshine_hours(location: str, start: str, end: str) -> dict:
             """
-            Get sunshine hours for a location and offset period.
+            Get the sunshine hours for a location over a period.
+
+            MeteoSwiss publishes sunshine as minutes per hour, which are added up over the period
+            and reported as hours.
 
             Args:
-                location (str): Location name (e.g., "Zurich").
-                lead_time_start_swiss (int): Start hour offset from today at 00:00 Swiss local time. Min offset time is 2 hours.
-                lead_time_end_swiss (int): End hour offset from today at 00:00 Swiss local time. Max offset time is 121 hours.
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                start (str): Swiss local time the period starts, e.g. "2026-09-23T06:00".
+                end (str): Swiss local time the period ends, e.g. "2026-09-23T18:00".
 
             Returns:
-                float: Predicted sunshine hours for the specified period.
+                dict: Sunshine in hours, the resolved location with its altitude, the period, and
+                    the model run.
 
             Examples:
-                sunshine_hours("Zurich", 2, 24)    # Total sunshine hours today
-                sunshine_hours("Zurich", 24, 48)   # Total sunshine hours tomorrow
-                sunshine_hours("Zurich", 30, 36)   # Total sunshine hours tomorrow morning
-                sunshine_hours("Zurich", 36, 42)   # Total sunshine hours tomorrow afternoon
-                sunshine_hours("Zurich", 42, 48)   # Total sunshine hours tomorrow evening
+                sunshine_hours("Zurich", "2026-09-23T00:00", "2026-09-24T00:00")   # the whole day
+                sunshine_hours("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")   # the afternoon
             """
             try:
-                if lead_time_start_swiss >= lead_time_end_swiss:
-                    raise ValueError(
-                        f"lead_time_start_swiss must be less than lead_time_end_swiss, "
-                        f"got lead_time_start_swiss={lead_time_start_swiss}, lead_time_end_swiss={lead_time_end_swiss}"
-                    )
-                lead_time_start_utc = _lead_time_swiss_to_utc(lead_time_start_swiss)
-                lead_time_end_utc = _lead_time_swiss_to_utc(lead_time_end_swiss)
                 result = await self.meteo.sunshine_hours_for_location(
-                    location,
-                    lead_time_start_utc, 
-                    lead_time_end_utc 
+                    location, _parse_swiss_time(start), _parse_swiss_time(end)
                 )
-                logger.info(f"sunshine_hours: location={location}, lead_time_start_swiss={lead_time_start_swiss}, lead_time_end_swiss={lead_time_end_swiss}, result={result}")
+                logger.info(f"sunshine_hours: location={location}, start={start}, end={end}, result={result}")
                 return result
-            except Exception as e:
-                logger.exception(f"Failed to get sunshine hours for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get sunshine hours for location '{location}': {e}") from e
+            except Exception as error:
+                logger.exception(f"Failed to get sunshine hours for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get sunshine hours for location '{location}': {error}") from error
 
         @self.mcp.tool()
-        async def temperature(location: str, lead_time_swiss: int) -> float:
+        async def precipitation_probability(location: str, when: str) -> dict:
             """
-            Get air temperature for a location at a specific offset time.
+            Get how likely rain is for a location at a specific time.
+
+            The probability covers a three hour window, not a single instant. Use this for "will it
+            rain", and total_rainfall for "how much".
 
             Args:
-                location (str): Location name (e.g., "Zurich").
-                lead_time_swiss (int): Hour offset from today at 00:00 Swiss local time. Min offset time is 2 hours. Max offset time is 121 hours.
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                when (str): Swiss local time, e.g. "2026-09-23T14:00". Up to 9 days ahead.
 
             Returns:
-                float: Maximum air temperature in Celsius for the given lead time.
+                dict: Probability in percent, the resolved location with its altitude, the time it
+                    is valid for, and the model run.
 
             Examples:
-                temperature("Zurich", 2)    # Temperature at 02:00 Swiss local time today
-                temperature("Zurich", 14)   # Temperature at 14:00 Swiss local time today
-                temperature("Zurich", 36)   # Temperature at 12:00 Swiss local time tomorrow
-                temperature("Zurich", 113)  # Temperature at 17:00 Swiss local time in 4 days
+                precipitation_probability("Zurich", "2026-09-23T14:00")
+                precipitation_probability("Lugano", "2026-09-24T18:00")
             """
             try:
-                lead_time_utc = _lead_time_swiss_to_utc(lead_time_swiss)
-                result = await self.meteo.temp_for_location(location, lead_time_utc)
-                logger.info(f"temperature: location={location}, offset={lead_time_swiss}, result={result}")
+                result = await self.meteo.precipitation_probability_for_location(location, _parse_swiss_time(when))
+                logger.info(f"precipitation_probability: location={location}, when={when}, result={result}")
                 return result
-            except Exception as e:
-                logger.exception(f"Failed to get temperature for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get temperature for location '{location}': {e}") from e
+            except Exception as error:
+                logger.exception(f"Failed to get precipitation probability for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get precipitation probability for location '{location}': {error}") from error
 
         @self.mcp.tool()
-        async def wind_speed(location: str, lead_time_swiss: int) -> float:
+        async def precipitation_rate(location: str, when: str) -> dict:
             """
-            Get predicted wind speed for a location at a specific offset time.
+            Get how much rain falls at a location during one hour.
+
+            This is the amount for that hour alone. For a longer period use total_rainfall.
 
             Args:
-                location (str): Location name (e.g., "Zurich").
-                lead_time_swiss (int): Hour offset from today at 00:00 Swiss local time. Min offset time is 2 hours. Max offset time is 121 hours.
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                when (str): Swiss local time, e.g. "2026-09-23T14:00". Up to 9 days ahead.
 
             Returns:
-                float: Predicted wind speed in meters per second.
+                dict: Rainfall in millimetres per hour, the resolved location with its altitude, the
+                    time it is valid for, and the model run.
 
             Examples:
-                wind_speed("Zurich", 2)    # Wind speed at 02:00 Swiss local time today
-                wind_speed("Zurich", 14)   # Wind speed at 14:00 Swiss local time today
-                wind_speed("Zurich", 36)   # Wind speed at 12:00 Swiss local time tomorrow
-                wind_speed("Zurich", 113)  # Wind speed at 17:00 Swiss local time in 4 days
+                precipitation_rate("Zurich", "2026-09-23T14:00")
+                precipitation_rate("Lugano", "2026-09-24T18:00")
             """
             try:
-                lead_time_utc = _lead_time_swiss_to_utc(lead_time_swiss)
-                result = await self.meteo.wind_speed_for_location(location, lead_time_utc)
-                logger.info(f"wind_speed: location={location}, lead_time_swiss={lead_time_swiss}, result={result}")
+                result = await self.meteo.precipitation_rate_for_location(location, _parse_swiss_time(when))
+                logger.info(f"precipitation_rate: location={location}, when={when}, result={result}")
                 return result
-            except Exception as e:
-                logger.exception(f"Failed to get wind speed for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get wind speed for location '{location}': {e}") from e
+            except Exception as error:
+                logger.exception(f"Failed to get precipitation rate for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get precipitation rate for location '{location}': {error}") from error
 
         @self.mcp.tool()
-        async def pressure_msl(location: str, lead_time_swiss: int) -> float:
+        async def wind_speed(location: str, when: str) -> dict:
             """
-            Get sea-level pressure for a location at a specific offset time.
+            Get the wind speed for a location at a specific time.
+
+            This is the mean over that hour. For the strongest gusts use wind_gusts instead, which
+            is what matters for whether the wind is dangerous.
 
             Args:
-                location (str): Location name (e.g., "Zurich").
-                lead_time_swiss (int): Hour offset from today at 00:00 Swiss local time. Min offset time is 2 hours. Max offset time is 121 hours.
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                when (str): Swiss local time, e.g. "2026-09-23T14:00". Up to 9 days ahead.
 
             Returns:
-                float: Sea-level pressure in Pascals (Pa).
+                dict: Wind speed in kilometres per hour, the resolved location with its altitude,
+                    the time it is valid for, and the model run.
 
             Examples:
-                pressure_msl("Zurich", 2)    # Pressure at 02:00 Swiss local time today
-                pressure_msl("Zurich", 14)   # Pressure at 14:00 Swiss local time today
-                pressure_msl("Zurich", 36)   # Pressure at 12:00 Swiss local time tomorrow
-                pressure_msl("Zurich", 113)  # Pressure at 17:00 Swiss local time in 4 days
+                wind_speed("Zurich", "2026-09-23T14:00")
+                wind_speed("Säntis", "2026-09-24T12:00")
             """
             try:
-                lead_time_utc = _lead_time_swiss_to_utc(lead_time_swiss)
-                result = await self.meteo.pressure_msl_for_location(location, lead_time_utc) 
-                logger.info(f"pressure_msl: location={location}, lead_time_swiss={lead_time_swiss}, result={result}")
-                return result  
-            except Exception as e:
-                logger.exception(f"Failed to get pressure for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get pressure for location '{location}': {e}") from e
+                result = await self.meteo.wind_speed_for_location(location, _parse_swiss_time(when))
+                logger.info(f"wind_speed: location={location}, when={when}, result={result}")
+                return result
+            except Exception as error:
+                logger.exception(f"Failed to get wind speed for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get wind speed for location '{location}': {error}") from error
 
         @self.mcp.tool()
-        async def total_cloud_cover(location: str, lead_time_swiss: int) -> float:
+        async def wind_gusts(location: str, when: str) -> dict:
             """
-            Get total cloud cover percentage for a location at a specific offset time.
+            Get the strongest wind gust expected at a location during one hour.
+
+            This is the peak one second gust within that hour, which is usually much higher than
+            the mean wind speed and is what makes wind hazardous.
 
             Args:
-                location (str): Location name (e.g., "Zurich").
-                lead_time_swiss (int): Hour offset from today at 00:00 Swiss local time. Min offset time is 2 hours. Max offset time is 121 hours.
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                when (str): Swiss local time, e.g. "2026-09-23T14:00". Up to 9 days ahead.
 
             Returns:
-                float: Total cloud cover percentage.
+                dict: Gust speed in kilometres per hour, the resolved location with its altitude,
+                    the time it is valid for, and the model run.
 
             Examples:
-                total_cloud_cover("Zurich", 2)    # Cloud cover at 02:00 Swiss local time today
-                total_cloud_cover("Zurich", 14)   # Cloud cover at 14:00 Swiss local time today
-                total_cloud_cover("Zurich", 36)   # Cloud cover at 12:00 Swiss local time tomorrow
-                total_cloud_cover("Zurich", 113)  # Cloud cover at 17:00 Swiss local time in 4 days
+                wind_gusts("Zurich", "2026-09-23T14:00")
+                wind_gusts("Jungfraujoch", "2026-09-24T12:00")
             """
             try:
-                lead_time_utc = _lead_time_swiss_to_utc(lead_time_swiss)
-                result = await self.meteo.total_cloud_cover_for_location(location, lead_time_utc) 
-                logger.info(f"total_cloud_cover: location={location}, lead_time_swiss={lead_time_swiss}, result={result}")
+                result = await self.meteo.wind_gusts_for_location(location, _parse_swiss_time(when))
+                logger.info(f"wind_gusts: location={location}, when={when}, result={result}")
                 return result
-            except Exception as e:
-                logger.exception(f"Failed to get total cloud cover for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get total cloud cover for location '{location}': {e}") from e
+            except Exception as error:
+                logger.exception(f"Failed to get wind gusts for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get wind gusts for location '{location}': {error}") from error
 
         @self.mcp.tool()
-        async def snow_depth(location: str, lead_time_swiss: int) -> float:
+        async def wind_direction(location: str, when: str) -> dict:
             """
-            Get forecasted snow depth for a location at a specific offset time.
+            Get the direction the wind blows from at a location at a specific time.
+
+            Reported as the hourly mean, in degrees clockwise from north, so 0 is a north wind and
+            180 a south wind.
 
             Args:
-                location (str): Location name (e.g., "Zurich").
-                lead_time_swiss (int): Hour offset from today at 00:00 Swiss local time. Min offset time is 2 hours. Max offset time is 121 hours.
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                when (str): Swiss local time, e.g. "2026-09-23T14:00". Up to 9 days ahead.
 
             Returns:
-                float: Forecasted snow depth in meters.
+                dict: Direction in degrees and as a compass point such as "SW", the resolved
+                    location with its altitude, the time it is valid for, and the model run.
 
             Examples:
-                snow_depth("Zurich", 2)    # Snow depth at 02:00 Swiss local time today
-                snow_depth("Zurich", 14)   # Snow depth at 14:00 Swiss local time today
-                snow_depth("Zurich", 36)   # Snow depth at 12:00 Swiss local time tomorrow
-                snow_depth("Zurich", 113)  # Snow depth at 17:00 Swiss local time in 4 days
+                wind_direction("Zurich", "2026-09-23T14:00")
+                wind_direction("Altdorf", "2026-09-24T12:00")
             """
             try:
-                lead_time_utc = _lead_time_swiss_to_utc(lead_time_swiss)
-                result = await self.meteo.snow_depth_for_location(location, lead_time_utc) 
-                logger.info(f"snow_depth: location={location}, lead_time_swiss={lead_time_swiss}, result={result}")
+                result = await self.meteo.wind_direction_for_location(location, _parse_swiss_time(when))
+                logger.info(f"wind_direction: location={location}, when={when}, result={result}")
                 return result
-            except Exception as e:
-                logger.exception(f"Failed to get snow depth for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get snow depth for location '{location}': {e}") from e
+            except Exception as error:
+                logger.exception(f"Failed to get wind direction for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get wind direction for location '{location}': {error}") from error
 
         @self.mcp.tool()
-        async def precipitation_rate(location: str, lead_time_swiss: int) -> float:
+        async def total_cloud_cover(location: str, when: str) -> dict:
             """
-            Get precipitation rate for a location at a specific offset time.
+            Get how cloudy it is at a location at a specific time.
+
+            MeteoSwiss publishes low, medium and high cloud separately, and they overlap, so the
+            total is an estimate that assumes the layers are independent. All three layers are
+            returned as well, which tells low fog apart from thin high cloud.
+
+            This reads three files, so it is the most expensive tool. When a number is not needed,
+            weather_description answers "how cloudy" more cheaply and in plain words.
 
             Args:
-                location (str): Location name (e.g., "Zurich").
-                lead_time_swiss (int): Hour offset from today at 00:00 Swiss local time. Min offset time is 2 hours. Max offset time is 121 hours.
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                when (str): Swiss local time, e.g. "2026-09-23T14:00". Up to 9 days ahead.
 
             Returns:
-                float: Precipitation rate in millimeters per second.
+                dict: Estimated total cloud cover in percent, the low, medium and high layers in
+                    percent, the resolved location with its altitude, the time it is valid for,
+                    and the model run.
 
             Examples:
-                precipitation_rate("Zurich", 2)    # Precipitation rate at 02:00 Swiss local time today
-                precipitation_rate("Zurich", 14)   # Precipitation rate at 14:00 Swiss local time today
-                precipitation_rate("Zurich", 36)   # Precipitation rate at 12:00 Swiss local time tomorrow
-                precipitation_rate("Zurich", 113)  # Precipitation rate at 17:00 Swiss local time in 4 days
+                total_cloud_cover("Zurich", "2026-09-23T14:00")
+                total_cloud_cover("Locarno", "2026-09-24T09:00")
             """
             try:
-                lead_time_utc = _lead_time_swiss_to_utc(lead_time_swiss)
-                result = await self.meteo.total_precipitation_rate_for_location(location, lead_time_utc) 
-                logger.info(f"precipitation_rate: location={location}, lead_time_swiss={lead_time_swiss}, result={result}")
+                result = await self.meteo.total_cloud_cover_for_location(location, _parse_swiss_time(when))
+                logger.info(f"total_cloud_cover: location={location}, when={when}, result={result}")
                 return result
-            except Exception as e:
-                logger.exception(f"Failed to get precipitation rate for location '{location}': {e}")
-                raise RuntimeError(f"Failed to get precipitation rate for location '{location}': {e}") from e
+            except Exception as error:
+                logger.exception(f"Failed to get total cloud cover for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get total cloud cover for location '{location}': {error}") from error
+
+        @self.mcp.tool()
+        async def freezing_level(location: str, when: str) -> dict:
+            """
+            Get the height of the 0 degree line at a location at a specific time.
+
+            Above this altitude precipitation falls as snow, so it answers questions about snow in
+            the mountains, such as how high a ski area has to be.
+
+            Args:
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                when (str): Swiss local time, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+
+            Returns:
+                dict: The freezing level in metres above sea level, the resolved location with its
+                    altitude, the time it is valid for, and the model run.
+
+            Examples:
+                freezing_level("Zermatt", "2026-09-23T14:00")
+                freezing_level("Davos", "2026-09-25T06:00")
+            """
+            try:
+                result = await self.meteo.freezing_level_for_location(location, _parse_swiss_time(when))
+                logger.info(f"freezing_level: location={location}, when={when}, result={result}")
+                return result
+            except Exception as error:
+                logger.exception(f"Failed to get the freezing level for location '{location}': {error}")
+                raise RuntimeError(f"Failed to get the freezing level for location '{location}': {error}") from error
 
     def run(self):
         if self.transport == "stdio":
@@ -349,7 +457,6 @@ def main():
     try:
         args = _parse_args()
         setup_logging(args.log_level)
-        load_dotenv(find_dotenv(usecwd=True))
         server = MeteoSwissMCPServer(args)
         server.run()
     except KeyboardInterrupt:

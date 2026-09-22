@@ -1,0 +1,414 @@
+import csv
+import logging
+import shutil
+import unicodedata
+import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Dict, List, NamedTuple, Optional, Tuple
+from zoneinfo import ZoneInfo
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+COLLECTION_ID = "ch.meteoschweiz.ogd-local-forecasting"
+STAC_BASE_URL = "https://data.geo.admin.ch/api/stac/v1"
+POINT_TABLE_URL = f"https://data.geo.admin.ch/{COLLECTION_ID}/ogd-local-forecasting_meta_point.csv"
+
+# The item id is built from the Swiss calendar day, the same anchor the published window uses
+LOCAL_TZ = ZoneInfo("Europe/Zurich")
+
+# The point table only changes when MeteoSwiss adds a location, so it is refetched rarely
+POINT_TABLE_MAX_AGE = timedelta(days=7)
+# A run is published every hour, rechecking a few times an hour picks a new one up promptly
+RUN_LOOKUP_MAX_AGE = timedelta(minutes=5)
+REQUEST_TIMEOUT_SECONDS = 60
+DOWNLOAD_CHUNK_BYTES = 1 << 20
+
+# MeteoSwiss pictogram codes, published by jp2000d0 (daily) and jww003i0 (3 hourly). Codes above 100
+# are the night variant of the same weather. Taken from the MeteoSwiss icon reference sheet, with its
+# "cloudly" spelling corrected because these strings are shown to the user.
+PICTOGRAM_DESCRIPTIONS = {
+    1: "sunny",
+    2: "mostly sunny, some clouds",
+    3: "partly sunny, thick passing clouds",
+    4: "overcast",
+    5: "very cloudy",
+    6: "sunny intervals, isolated showers",
+    7: "sunny intervals, isolated sleet",
+    8: "sunny intervals, snow showers",
+    9: "overcast, some rain showers",
+    10: "overcast, some sleet",
+    11: "overcast, some snow showers",
+    12: "sunny intervals, chance of thunderstorms",
+    13: "sunny intervals, possible thunderstorms",
+    14: "very cloudy, light rain",
+    15: "very cloudy, light sleet",
+    16: "very cloudy, light snow showers",
+    17: "very cloudy, intermittent rain",
+    18: "very cloudy, intermittent sleet",
+    19: "very cloudy, intermittent snow",
+    20: "very overcast with rain",
+    21: "very overcast with frequent sleet",
+    22: "very overcast with heavy snow",
+    23: "very overcast, slight chance of storms",
+    24: "very overcast with storms",
+    25: "very cloudy, very stormy",
+    26: "high clouds",
+    27: "stratus",
+    28: "fog",
+    29: "sunny intervals, scattered showers",
+    30: "sunny intervals, scattered snow showers",
+    31: "sunny intervals, scattered sleet",
+    32: "sunny intervals, some showers",
+    33: "short sunny intervals, frequent rain",
+    34: "short sunny intervals, frequent snowfalls",
+    35: "overcast and dry",
+    36: "partly sunny, slightly stormy",
+    37: "partly sunny, stormy snow showers",
+    38: "overcast, thundery showers",
+    39: "overcast, thundery snow showers",
+    40: "very cloudy, slightly stormy",
+    41: "overcast, slightly stormy",
+    42: "very cloudy, thundery snow showers",
+    101: "clear",
+    102: "slightly overcast",
+    103: "heavy cloud formations",
+    104: "overcast",
+    105: "very cloudy",
+    106: "overcast, scattered showers",
+    107: "overcast, scattered rain and snow showers",
+    108: "overcast, snow showers",
+    109: "overcast, some showers",
+    110: "overcast, some rain and snow showers",
+    111: "overcast, some snow showers",
+    112: "slightly stormy",
+    113: "storms",
+    114: "very cloudy, light rain",
+    115: "very cloudy, light rain and snow showers",
+    116: "very cloudy, light snowfall",
+    117: "very cloudy, intermittent rain",
+    118: "very cloudy, intermittant mixed rain and snowfall",
+    119: "very cloudy, intermittent snowfall",
+    120: "very cloudy, constant rain",
+    121: "very cloudy, frequent rain and snowfall",
+    122: "very cloudy, heavy snowfall",
+    123: "very cloudy, slightly stormy",
+    124: "very cloudy, stormy",
+    125: "very cloudy, storms",
+    126: "high cloud",
+    127: "stratus",
+    128: "fog",
+    129: "slightly overcast, scattered showers",
+    130: "slightly overcast, scattered snowfall",
+    131: "slightly overcast, rain and snow showers",
+    132: "slightly overcast, some showers",
+    133: "overcast, frequent snow showers",
+    134: "overcast, frequent snow showers",
+    135: "overcast and dry",
+    136: "slightly overcast, slightly stormy",
+    137: "slightly overcast, stormy snow showers",
+    138: "overcast, thundery showers",
+    139: "overcast, thundery snow showers",
+    140: "very cloudy, slightly stormy",
+    141: "overcast, slightly stormy",
+    142: "very cloudy, thundery snow showers",
+}
+
+
+class Point(NamedTuple):
+    """A forecast location as the MeteoSwiss point table describes it."""
+    point_id: str
+    point_type_id: str
+    name: str
+    postal_code: str
+    height_masl: float
+
+    def label(self) -> str:
+        """
+        Describe the point well enough that the caller can tell which one was picked.
+
+        A city name maps to many points, so the postal code and altitude are what distinguish
+        the village of Zermatt from its mountain station.
+        """
+        name = f"{self.name} {self.postal_code}" if self.postal_code else self.name
+        return f"{name} ({self.height_masl:.0f} m)"
+
+
+class Series(NamedTuple):
+    """One parameter over the whole forecast window at one point, with the run it came from."""
+    run: datetime
+    values: Dict[datetime, float]
+
+
+def _preference(point: Point) -> Tuple[bool, str, int]:
+    """
+    Order candidates so a location always resolves to the same point.
+
+    Postal code centres come before stations, and the lowest code comes first, which is the
+    historic centre of a city. The point id breaks the remaining ties and is compared as a
+    number, because "100" sorts before "26" when compared as text.
+    """
+    return (not point.postal_code, point.postal_code, int(point.point_id))
+
+
+def _normalise(name: str) -> str:
+    """
+    Fold case and strip accents so "zurich" finds "Zürich".
+
+    Parameters:
+        name (str): Location name as the caller wrote it.
+
+    Returns:
+        str: Comparable form of the name.
+    """
+    folded = unicodedata.normalize("NFKD", name.casefold())
+    return "".join(character for character in folded if not unicodedata.combining(character)).strip()
+
+
+class LocalForecast:
+    """
+    Read point forecasts from the MeteoSwiss local forecasting collection.
+
+    MeteoSwiss publishes one CSV per parameter and model run, holding every hour of the forecast
+    window for every location. The hourly files are about 31 MB, so they are streamed and discarded,
+    and only the rows of the requested point are kept. A new run appears every hour under a new file
+    name, so a stored file can never go stale, only be superseded.
+    """
+
+    def __init__(self, cache_dir: Path, cache_all_locations: bool = False):
+        self.cache_dir = cache_dir
+        self.cache_all_locations = cache_all_locations
+        self.points: List[Point] = []
+        self.run_lookup: Optional[Tuple[datetime, str, Dict[str, str]]] = None
+
+    def _point_table(self) -> Path:
+        """Return the cached point table, downloading it when it is missing or stale."""
+        table = self.cache_dir / "ogd-local-forecasting_meta_point.csv"
+        if table.exists():
+            age = datetime.now() - datetime.fromtimestamp(table.stat().st_mtime)
+            if age < POINT_TABLE_MAX_AGE:
+                return table
+
+        logger.info("Downloading the MeteoSwiss forecast point table")
+        table.parent.mkdir(parents=True, exist_ok=True)
+        download = table.with_name(f"{table.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            with requests.get(POINT_TABLE_URL, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                response.raise_for_status()
+                with open(download, "wb") as file:
+                    for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
+                        file.write(chunk)
+            download.replace(table)  # atomic, so a partial file never carries the real name
+        finally:
+            download.unlink(missing_ok=True)
+        return table
+
+    def _load_points(self) -> List[Point]:
+        """Read the point table into memory once per process."""
+        if self.points:
+            return self.points
+
+        with open(self._point_table(), newline="", encoding="latin-1") as file:
+            for row in csv.DictReader(file, delimiter=";"):
+                self.points.append(Point(
+                    point_id=row["point_id"],
+                    point_type_id=row["point_type_id"],
+                    name=row["point_name"],
+                    postal_code=row["postal_code"],
+                    height_masl=float(row["point_height_masl"] or "nan"),
+                ))
+        logger.info(f"Loaded {len(self.points)} forecast locations")
+        return self.points
+
+    def resolve(self, location: str) -> Point:
+        """
+        Find the forecast point for a location name or a Swiss postal code.
+
+        Only exact matches are accepted. Near matching was measured to be actively misleading here:
+        "Wallis" is closest to "Wallisellen", a Zurich suburb 150 km from the canton it names, so a
+        best guess would answer confidently for the wrong side of the country.
+
+        A city spans several postal code areas, so the lowest code is used, which is the historic
+        centre. Locations without a postal code entry fall back to their weather station.
+
+        Parameters:
+            location (str): Location name (e.g., "Zurich") or postal code (e.g., "8001").
+
+        Returns:
+            Point: The resolved forecast point.
+        """
+        points = self._load_points()
+        wanted = _normalise(location)
+
+        matches = [point for point in points if point.postal_code == wanted]
+        if not matches:
+            matches = [point for point in points if _normalise(point.name) == wanted]
+        if not matches:
+            raise ValueError(
+                f"Location '{location}' is not one of the {len(points)} places MeteoSwiss publishes "
+                f"forecasts for. Check the spelling, or try a nearby town, village or postal code."
+            )
+
+        return min(matches, key=_preference)
+
+    def _assets_by_run(self, day: datetime) -> Dict[str, Dict[str, str]]:
+        """Return one daily STAC item's assets, grouped by run and keyed by parameter."""
+        item_url = f"{STAC_BASE_URL}/collections/{COLLECTION_ID}/items/{day.strftime('%Y%m%d')}-ch"
+        response = requests.get(item_url, timeout=REQUEST_TIMEOUT_SECONDS)
+        if response.status_code == 404:
+            return {}
+        response.raise_for_status()
+
+        by_run: Dict[str, Dict[str, str]] = {}
+        for key, asset in response.json().get("assets", {}).items():
+            # Asset names look like vnut12.lssw.<run>.<parameter>.csv
+            parts = key.split(".")
+            if len(parts) == 5:
+                by_run.setdefault(parts[2], {})[parts[3]] = asset["href"]
+        return by_run
+
+    def latest_run(self) -> Tuple[str, Dict[str, str]]:
+        """
+        Find the newest published run and the parameter files it holds.
+
+        Tomorrow's item already exists but stays empty until its first run lands, hence the fall
+        back to the previous day. The answer is held briefly so that a tool needing six parameters
+        does not ask the API six times.
+
+        Returns:
+            Tuple[str, Dict[str, str]]: The run stamp (YYYYMMDDHHMM) and its parameter file URLs.
+        """
+        if self.run_lookup and datetime.now(timezone.utc) - self.run_lookup[0] < RUN_LOOKUP_MAX_AGE:
+            return self.run_lookup[1], self.run_lookup[2]
+
+        today = datetime.now(LOCAL_TZ)
+        for day in (today, today - timedelta(days=1)):
+            by_run = self._assets_by_run(day)
+            if by_run:
+                # The stamp is fixed width and zero padded, so the newest run is the largest string
+                run = max(by_run)
+                self.run_lookup = (datetime.now(timezone.utc), run, by_run[run])
+                return run, by_run[run]
+
+        raise RuntimeError(
+            "The MeteoSwiss local forecasting collection published no run for today or yesterday"
+        )
+
+    def _store_point_rows(self, url: str, point: Point, target: Path) -> None:
+        """
+        Stream a parameter file and keep the rows the cache mode asks for.
+
+        The published file carries every location, which is far too large to hold on to, while a
+        single point is a few hundred rows. Streaming keeps the traffic without keeping the bulk.
+        """
+        prefix = f"{point.point_id};{point.point_type_id};".encode()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # A unique name, because two streamable-http requests can fetch the same asset at once
+        download = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            with requests.get(url, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                response.raise_for_status()
+                with open(download, "wb") as file:
+                    # Split megabyte chunks rather than using iter_lines(), which spends about
+                    # 45 seconds per file walking a million lines one at a time
+                    remainder = b""
+                    for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
+                        if self.cache_all_locations:
+                            file.write(chunk)
+                            continue
+                        lines = (remainder + chunk).split(b"\n")
+                        remainder = lines.pop()  # the last piece may be half a line
+                        for line in lines:
+                            if line.startswith(prefix):
+                                file.write(line + b"\n")
+                    if not self.cache_all_locations and remainder.startswith(prefix):
+                        file.write(remainder + b"\n")
+            download.replace(target)
+        finally:
+            download.unlink(missing_ok=True)
+
+    def _drop_superseded_runs(self, current_run: str) -> None:
+        """
+        Remove the folders of runs that a newer one has replaced.
+
+        Only the current run's folder is ever read, so this reclaims space rather than protecting
+        correctness, and it runs after a successful download rather than on a timer.
+        """
+        for folder in (self.cache_dir / "runs").iterdir():
+            if folder.is_dir() and folder.name != current_run:
+                logger.info(f"Dropping superseded run {folder.name}")
+                shutil.rmtree(folder, ignore_errors=True)
+
+    def _cached_file(self, parameter: str, point: Point, run: str, url: str) -> Path:
+        """
+        Return the file holding this parameter for this run, fetching it if it is not there yet.
+
+        A run already on disk may have been stored either way round, so a full file is used when
+        one exists and a point extract otherwise. Only the current run's folder is looked in,
+        which makes a superseded file unreadable rather than merely unwanted.
+        """
+        run_dir = self.cache_dir / "runs" / run
+        full_file = run_dir / f"{parameter}.csv"
+        point_file = run_dir / f"{parameter}_{point.point_id}_{point.point_type_id}.csv"
+
+        if full_file.exists():
+            return full_file
+        if point_file.exists():
+            return point_file
+
+        logger.info(f"Reading {parameter} for {point.label()} from run {run}")
+        target = full_file if self.cache_all_locations else point_file
+        self._store_point_rows(url, point, target)
+        self._drop_superseded_runs(run)
+        return target
+
+    def _read_values(self, path: Path, point: Point) -> Dict[datetime, float]:
+        """
+        Read one point's values out of a cached file.
+
+        No header is skipped: a point extract has none, and a header line can never start with
+        the point prefix, so the same scan serves a full file and an extract alike.
+        """
+        prefix = f"{point.point_id};{point.point_type_id};".encode()
+        values: Dict[datetime, float] = {}
+
+        with open(path, "rb") as file:
+            for line in file:
+                if not line.startswith(prefix):
+                    continue
+                _, _, stamp, value = line.decode("latin-1").strip().split(";")
+                try:
+                    measured_at = datetime.strptime(stamp, "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
+                    values[measured_at] = float(value)
+                except ValueError:
+                    continue  # gaps are published as empty fields
+
+        return values
+
+    def series(self, parameter: str, point: Point) -> Series:
+        """
+        Read one parameter over the whole forecast window at one point.
+
+        Parameters:
+            parameter (str): MeteoSwiss parameter shortname (e.g., "tre200h0", "fu3010h0").
+            point (Point): The resolved forecast point.
+
+        Returns:
+            Series: The run the values came from, and the values keyed by UTC timestamp.
+        """
+        run, assets = self.latest_run()
+        if parameter not in assets:
+            raise ValueError(
+                f"Run {run} does not publish parameter '{parameter}', it has: {', '.join(sorted(assets))}"
+            )
+
+        values = self._read_values(self._cached_file(parameter, point, run, assets[parameter]), point)
+        if not values:
+            raise ValueError(
+                f"MeteoSwiss publishes no '{parameter}' values for {point.label()}. Some entries, "
+                f"such as the regional ones, only carry part of the forecast, try a nearby town."
+            )
+
+        return Series(run=datetime.strptime(run, "%Y%m%d%H%M").replace(tzinfo=timezone.utc), values=values)
