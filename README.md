@@ -200,8 +200,9 @@ altitude, the time it applies to, and the model run the forecast came from.
 
 **Time**
 - Timestamps are ISO and read as Swiss local time, e.g. `"2026-09-23T14:00"`. An explicit offset is honoured.
-- MeteoSwiss stamps each hourly value at the end of its hour, so `14:00` means 13:00 to 14:00, and a
-  period from `start` to `end` covers exactly the hours in between.
+- MeteoSwiss stamps an hourly average or sum at the end of its hour, so `14:00` means 13:00 to 14:00,
+  and a period from `start` to `end` covers exactly the hours in between. Cloud cover and the freezing
+  level are values at that moment instead.
 - The forecast reaches about 9 days ahead from the newest run, so the window shrinks slightly as the day goes on.
 
 > **Note:** Ask `current_date_and_time()` first when the question is relative, such as "tomorrow" or

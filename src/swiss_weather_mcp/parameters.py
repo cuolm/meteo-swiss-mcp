@@ -3,7 +3,10 @@ The parameters the server reads from the MeteoSwiss local forecast collection.
 
 Everything here changes only when MeteoSwiss changes what it publishes. The comment on each code
 is the MeteoSwiss description of that parameter, from ogd-local-forecasting_meta_parameters.csv.
-Hourly values are stamped at the end of the hour they cover, daily values at the start of their day.
+
+All times are UTC. An hourly average or sum is stamped at the end of the hour it covers, and a
+3 hourly one at the end of its 3 hours. The SNAPSHOTS below are values at the moment of their stamp
+instead. Daily values are stamped at the start of their day.
 """
 
 # ── hourly ───────────────────────────────────────────────────────────────────
@@ -19,6 +22,10 @@ CLOUD_COVER_LOW = "nprolohs"            # Low cloud cover [fraction 0..1]
 CLOUD_COVER_MEDIUM = "npromths"         # Medium cloud cover [fraction 0..1]
 CLOUD_COVER_HIGH = "nprohihs"           # High cloud cover [fraction 0..1]
 WEATHER_PICTOGRAM = "jww003i0"          # MeteoSwiss-Icon, weathertype, preceding 3 hours, forecast [code]
+
+# Hourly values taken at the moment of their stamp rather than over the hour before it. MeteoSwiss:
+# "in some specific cases an instantaneous value (cloud cover, zero degree level)".
+SNAPSHOTS = {FREEZING_LEVEL, CLOUD_COVER_LOW, CLOUD_COVER_MEDIUM, CLOUD_COVER_HIGH}
 
 # ── daily, 00:00 - 24:00 Swiss local time ────────────────────────────────────
 TEMPERATURE_DAY_MIN = "tre200pn"        # Air temperature 2 m above ground; daily minimum [°C]

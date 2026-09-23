@@ -32,17 +32,28 @@ DAILY_PARAMETERS = (
 
 def _closing_stamp(moment: datetime) -> datetime:
     """
-    Return the stamp of the forecast row whose hour contains a moment.
+    Return the stamp of the forecast row whose hour contains a moment, for averages and sums.
 
-    MeteoSwiss stamps each hourly value at the end of the hour it covers, so the row stamped 14:00
-    is the hour from 13:00 to 14:00. A moment on the full hour therefore reads the row stamped at
-    that hour, and 14:30 reads the row stamped 15:00.
+    MeteoSwiss stamps an hourly average or sum at the end of the hour it covers, so the row stamped
+    14:00 is the hour from 13:00 to 14:00. A moment on the full hour therefore reads the row stamped
+    at that hour, and 14:30 reads the row stamped 15:00.
     """
     moment = moment.astimezone(timezone.utc)
     full_hour = moment.replace(minute=0, second=0, microsecond=0)
     if full_hour < moment:
         return full_hour + timedelta(hours=1)
     return full_hour
+
+
+def _nearest_stamp(moment: datetime) -> datetime:
+    """
+    Return the stamp closest to a moment, for values taken at the moment of their stamp.
+
+    A snapshot such as cloud cover belongs to its stamp alone, so 14:20 is best answered by the
+    14:00 value, 20 minutes away, rather than by the 15:00 one. Half past rounds up.
+    """
+    moment = moment.astimezone(timezone.utc) + timedelta(minutes=30)
+    return moment.replace(minute=0, second=0, microsecond=0)
 
 
 def _swiss(moment: datetime) -> str:
@@ -99,8 +110,16 @@ class SwissWeatherPredictions:
         return await asyncio.to_thread(self.forecast.series, parameter, point)
 
     def _value_at(self, series: Series, when: datetime, point: Point, parameter: str) -> float:
-        """Pick the forecast row whose hour contains the requested time."""
-        stamp = _closing_stamp(when)
+        """
+        Pick the forecast row for the requested time.
+
+        An average or sum is read from the row whose hour contains the time, a snapshot from the
+        row stamped closest to it.
+        """
+        if parameter in parameters.SNAPSHOTS:
+            stamp = _nearest_stamp(when)
+        else:
+            stamp = _closing_stamp(when)
         if stamp not in series.values:
             raise ValueError(
                 f"{_swiss(when)} is outside the forecast for {point.label()}. "
