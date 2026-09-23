@@ -50,8 +50,8 @@ def _swiss(moment: datetime) -> str:
     return f"{moment.astimezone(SWISS_TZ):%Y-%m-%d %H:%M}"
 
 
-def _valid_at(moment: datetime) -> str:
-    """Render a moment as a Swiss local timestamp, for the answer a tool returns."""
+def _swiss_timestamp(moment: datetime) -> str:
+    """Render a moment as a Swiss local ISO timestamp with its offset, the one form every time in an answer uses."""
     return moment.astimezone(SWISS_TZ).isoformat(timespec="minutes")
 
 
@@ -141,7 +141,7 @@ class SwissWeatherPredictions:
         """
         result = {"value": value, "unit": unit, "location": point.label(), "altitude_m": point.height_masl}
         result.update(fields)
-        result["model_run"] = f"{run:%Y-%m-%dT%H:%M}Z"
+        result["model_run"] = _swiss_timestamp(run)
         return result
 
     async def _value_for_location(self, location: str, parameter: str, when: datetime, unit: str) -> Dict[str, Any]:
@@ -160,7 +160,7 @@ class SwissWeatherPredictions:
         point = await self._resolve(location)
         series = await self._series(parameter, point)
         value = self._value_at(series, when, point, parameter)
-        return self._result(value, unit, point, series.run, valid_at=_valid_at(when))
+        return self._result(value, unit, point, series.run, valid_at=_swiss_timestamp(when))
 
     async def temperature_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
         return await self._value_for_location(location, parameters.TEMPERATURE, when, "°C")
@@ -191,7 +191,7 @@ class SwissWeatherPredictions:
         code = int(self._value_at(series, when, point, parameters.WEATHER_PICTOGRAM))
         return self._result(
             _describe(code), "description", point, series.run,
-            valid_at=_valid_at(when), pictogram_code=code,
+            valid_at=_swiss_timestamp(when), pictogram_code=code,
         )
 
     async def total_rainfall_for_location(self, location: str, start: datetime, end: datetime) -> Dict[str, Any]:
@@ -199,14 +199,14 @@ class SwissWeatherPredictions:
         series = await self._series(parameters.PRECIPITATION, point)
         total = self._sum_between(series, start, end, point, parameters.PRECIPITATION)
         return self._result(round(total, 1), "mm", point, series.run,
-                            **{"from": _valid_at(start), "to": _valid_at(end)})
+                            **{"from": _swiss_timestamp(start), "to": _swiss_timestamp(end)})
 
     async def sunshine_hours_for_location(self, location: str, start: datetime, end: datetime) -> Dict[str, Any]:
         point = await self._resolve(location)
         series = await self._series(parameters.SUNSHINE, point)
         minutes = self._sum_between(series, start, end, point, parameters.SUNSHINE)
         return self._result(round(minutes / 60, 1), "h", point, series.run,
-                            **{"from": _valid_at(start), "to": _valid_at(end)})
+                            **{"from": _swiss_timestamp(start), "to": _swiss_timestamp(end)})
 
     async def total_cloud_cover_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
         point = await self._resolve(location)
@@ -222,7 +222,7 @@ class SwissWeatherPredictions:
         clear = (1 - layers["low"]) * (1 - layers["medium"]) * (1 - layers["high"])
         return self._result(
             round((1 - clear) * 100, 1), "%", point, run,
-            valid_at=_valid_at(when),
+            valid_at=_swiss_timestamp(when),
             low_percent=round(layers["low"] * 100, 1),
             medium_percent=round(layers["medium"] * 100, 1),
             high_percent=round(layers["high"] * 100, 1),
@@ -299,5 +299,5 @@ class SwissWeatherPredictions:
             summary["pictogram_code"] = int(summary["weather"])
             summary["weather"] = _describe(summary["pictogram_code"])
 
-        summary["model_run"] = f"{run:%Y-%m-%dT%H:%M}Z"
+        summary["model_run"] = _swiss_timestamp(run)
         return summary
