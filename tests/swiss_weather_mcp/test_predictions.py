@@ -332,6 +332,6 @@ async def test_daily_forecast_reports_a_missing_parameter_instead_of_failing(pre
     result = await predictions_fixture.daily_forecast_for_location("Zurich", _swiss("2026-09-23T00:00"))
 
     assert result["temperature_max_c"] == 20.6
-    assert result["rainfall_mm"] is None
+    assert result["rainfall_median_mm"] is None
     assert result["location"] == "Zürich 8001 (409 m)"
     assert result["date"] == "2026-09-23"

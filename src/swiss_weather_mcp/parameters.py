@@ -31,8 +31,8 @@ SNAPSHOTS = {FREEZING_LEVEL, CLOUD_COVER_LOW, CLOUD_COVER_MEDIUM, CLOUD_COVER_HI
 TEMPERATURE_DAY_MIN = "tre200pn"        # Air temperature 2 m above ground; daily minimum [°C]
 TEMPERATURE_DAY_MAX = "tre200px"        # Air temperature 2 m above ground; daily maximum [°C]
 PRECIPITATION_DAY = "rka150p0"          # Precipitation; daily total [mm]
-PRECIPITATION_DAY_LOW = "rreq10p0"      # Precipitation; daily total, 10% quantile [mm]
-PRECIPITATION_DAY_HIGH = "rreq90p0"     # Precipitation; daily total, 90% quantile [mm]
+PRECIPITATION_DAY_Q10 = "rreq10p0"      # Precipitation; daily total, 10% quantile [mm]
+PRECIPITATION_DAY_Q90 = "rreq90p0"      # Precipitation; daily total, 90% quantile [mm]
 WEATHER_PICTOGRAM_DAY = "jp2000d0"      # MeteoSwiss pictogram number, daily value (valid for daytime period) [code]
 
 # MeteoSwiss pictogram codes, published by jp2000d0 (daily) and jww003i0 (3 hourly). Codes above 100

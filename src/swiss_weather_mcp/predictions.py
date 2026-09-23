@@ -23,9 +23,9 @@ CLOUD_LAYERS = (
 DAILY_PARAMETERS = (
     ("temperature_min_c", parameters.TEMPERATURE_DAY_MIN),
     ("temperature_max_c", parameters.TEMPERATURE_DAY_MAX),
-    ("rainfall_mm", parameters.PRECIPITATION_DAY),
-    ("rainfall_min_mm", parameters.PRECIPITATION_DAY_LOW),
-    ("rainfall_max_mm", parameters.PRECIPITATION_DAY_HIGH),
+    ("rainfall_median_mm", parameters.PRECIPITATION_DAY),
+    ("rainfall_10th_percentile_mm", parameters.PRECIPITATION_DAY_Q10),
+    ("rainfall_90th_percentile_mm", parameters.PRECIPITATION_DAY_Q90),
     ("weather", parameters.WEATHER_PICTOGRAM_DAY),
 )
 
@@ -291,9 +291,9 @@ class SwissWeatherPredictions:
             day (datetime): Any moment on the day wanted, timezone aware.
 
         Returns:
-            Dict[str, Any]: Minimum and maximum temperature, rainfall with its 10% and 90% range, a
-                worded summary, the resolved point and the model run. Fields MeteoSwiss does not
-                publish for this location are None.
+            Dict[str, Any]: Minimum and maximum temperature, the median rainfall with its 10th and
+                90th percentile, a worded summary, the resolved point and the model run. Fields
+                MeteoSwiss does not publish for this location are None.
         """
         point = await self._resolve(location)
         calendar_day = day.astimezone(SWISS_TZ).date()
