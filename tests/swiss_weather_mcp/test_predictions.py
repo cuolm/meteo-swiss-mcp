@@ -262,7 +262,7 @@ async def test_temperature_reports_the_value_with_the_point_it_resolved(predicti
     assert result["location"] == "Zürich 8001 (409 m)"
     assert result["altitude_m"] == 409.0
     assert result["valid_at"] == "2026-09-23T14:00+02:00"
-    assert result["model_run"] == "2026-09-22T13:00Z"
+    assert result["model_run"] == "2026-09-22T15:00+02:00"
 
 
 @pytest.mark.asyncio
