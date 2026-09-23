@@ -5,7 +5,7 @@ import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from typing import BinaryIO, Dict, List, NamedTuple, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import requests
@@ -135,6 +135,15 @@ class Point(NamedTuple):
         name = f"{self.name} {self.postal_code}" if self.postal_code else self.name
         return f"{name} ({self.height_masl:.0f} m)"
 
+    def prefix(self) -> bytes:
+        """
+        Return the start every data row of this point has, such as b"800100;2;".
+
+        The download keeps rows by this start and the reader finds them by it, so both must build
+        it the same way. Building it here is what guarantees that.
+        """
+        return f"{self.point_id};{self.point_type_id};".encode()
+
 
 class Series(NamedTuple):
     """One parameter over the whole forecast window at one point, with the run it came from."""
@@ -167,6 +176,59 @@ def _normalise(name: str) -> str:
     return "".join(character for character in folded if not unicodedata.combining(character)).strip()
 
 
+def _parse_stamp(stamp: str) -> datetime:
+    """Read a MeteoSwiss timestamp such as "202609231200", which is always UTC."""
+    return datetime.strptime(stamp, "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
+
+
+def _write_point_rows(response: requests.Response, point: Point, file: BinaryIO) -> None:
+    """
+    Write the rows of one point from a streamed response.
+
+    Megabyte chunks are split by hand rather than read with iter_lines(), which spends about
+    45 seconds per file walking a million lines one at a time.
+    """
+    prefix = point.prefix()
+    remainder = b""
+    for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
+        lines = (remainder + chunk).split(b"\n")
+        remainder = lines.pop()  # the last piece may be half a line
+        for line in lines:
+            if line.startswith(prefix):
+                file.write(line + b"\n")
+    if remainder.startswith(prefix):
+        file.write(remainder + b"\n")
+
+
+def _download(url: str, target: Path, point: Optional[Point] = None) -> None:
+    """
+    Stream a file from MeteoSwiss to disk.
+
+    The file is written under a unique temporary name and moved into place only once complete, so
+    an interrupted download is never mistaken for a cached file, and two requests fetching the same
+    file at once do not write into each other.
+
+    Parameters:
+        url (str): The file to download.
+        target (Path): Where the finished file ends up.
+        point (Optional[Point]): Keep only this point's rows, or every line when None.
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    download = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with requests.get(url, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            response.raise_for_status()
+            with open(download, "wb") as file:
+                if point is None:
+                    for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
+                        file.write(chunk)
+                else:
+                    _write_point_rows(response, point, file)
+        download.replace(target)
+    finally:
+        download.unlink(missing_ok=True)
+
+
 class LocalForecast:
     """
     Read point forecasts from the MeteoSwiss local forecasting collection.
@@ -192,17 +254,7 @@ class LocalForecast:
                 return table
 
         logger.info("Downloading the MeteoSwiss forecast point table")
-        table.parent.mkdir(parents=True, exist_ok=True)
-        download = table.with_name(f"{table.name}.{uuid.uuid4().hex}.tmp")
-        try:
-            with requests.get(POINT_TABLE_URL, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-                response.raise_for_status()
-                with open(download, "wb") as file:
-                    for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
-                        file.write(chunk)
-            download.replace(table)  # atomic, so a partial file never carries the real name
-        finally:
-            download.unlink(missing_ok=True)
+        _download(POINT_TABLE_URL, table)
         return table
 
     def _load_points(self) -> List[Point]:
@@ -296,39 +348,6 @@ class LocalForecast:
             "The MeteoSwiss local forecasting collection published no run for today or yesterday"
         )
 
-    def _store_point_rows(self, url: str, point: Point, target: Path) -> None:
-        """
-        Stream a parameter file and keep the rows the cache mode asks for.
-
-        The published file carries every location, which is far too large to hold on to, while a
-        single point is a few hundred rows. Streaming keeps the traffic without keeping the bulk.
-        """
-        prefix = f"{point.point_id};{point.point_type_id};".encode()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        # A unique name, because two streamable-http requests can fetch the same asset at once
-        download = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
-        try:
-            with requests.get(url, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-                response.raise_for_status()
-                with open(download, "wb") as file:
-                    # Split megabyte chunks rather than using iter_lines(), which spends about
-                    # 45 seconds per file walking a million lines one at a time
-                    remainder = b""
-                    for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
-                        if self.cache_all_locations:
-                            file.write(chunk)
-                            continue
-                        lines = (remainder + chunk).split(b"\n")
-                        remainder = lines.pop()  # the last piece may be half a line
-                        for line in lines:
-                            if line.startswith(prefix):
-                                file.write(line + b"\n")
-                    if not self.cache_all_locations and remainder.startswith(prefix):
-                        file.write(remainder + b"\n")
-            download.replace(target)
-        finally:
-            download.unlink(missing_ok=True)
-
     def _drop_superseded_runs(self, current_run: str) -> None:
         """
         Remove the folders of runs that newer ones have replaced, keeping the run just before this
@@ -373,9 +392,16 @@ class LocalForecast:
         if point_file.exists():
             return point_file
 
+        # The published file holds every location and runs to tens of megabytes. By default only
+        # this point's rows are kept, a few kilobytes, and the rest is discarded while streaming.
         logger.info(f"Reading {parameter} for {point.label()} from run {run}")
-        target = full_file if self.cache_all_locations else point_file
-        self._store_point_rows(url, point, target)
+        if self.cache_all_locations:
+            _download(url, full_file)
+            target = full_file
+        else:
+            _download(url, point_file, point=point)
+            target = point_file
+
         self._drop_superseded_runs(run)
         return target
 
@@ -386,7 +412,7 @@ class LocalForecast:
         No header is skipped: a point extract has none, and a header line can never start with
         the point prefix, so the same scan serves a full file and an extract alike.
         """
-        prefix = f"{point.point_id};{point.point_type_id};".encode()
+        prefix = point.prefix()
         values: Dict[datetime, float] = {}
 
         with open(path, "rb") as file:
@@ -395,8 +421,7 @@ class LocalForecast:
                     continue
                 _, _, stamp, value = line.decode("latin-1").strip().split(";")
                 try:
-                    measured_at = datetime.strptime(stamp, "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
-                    values[measured_at] = float(value)
+                    values[_parse_stamp(stamp)] = float(value)
                 except ValueError:
                     continue  # gaps are published as empty fields
 
@@ -426,4 +451,4 @@ class LocalForecast:
                 f"such as the regional ones, only carry part of the forecast, try a nearby town."
             )
 
-        return Series(run=datetime.strptime(run, "%Y%m%d%H%M").replace(tzinfo=timezone.utc), values=values)
+        return Series(run=_parse_stamp(run), values=values)
