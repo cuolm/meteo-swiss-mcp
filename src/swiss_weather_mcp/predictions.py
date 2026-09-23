@@ -1,19 +1,11 @@
 import asyncio
 import logging
-import os
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
-
-from platformdirs import user_cache_path
 
 from .localforecast import PICTOGRAM_DESCRIPTIONS, SWISS_TZ, LocalForecast, Point, Series
 
 logger = logging.getLogger(__name__)
-
-# Shared, OS-standard cache location (survives across working directories the server may be launched from).
-# Override with SWISS_WEATHER_MCP_CACHE_DIR, e.g. to isolate cache location in tests or Docker.
-CACHE_DIR = Path(os.environ.get("SWISS_WEATHER_MCP_CACHE_DIR", user_cache_path("swiss-weather-mcp")))
 
 # Compass points the wind direction in degrees is reported as, clockwise from north
 COMPASS_POINTS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -88,8 +80,14 @@ def _compass_point(degrees: float) -> str:
 
 
 class MeteoSwissPredictions:
-    def __init__(self, cache_all_locations: bool = False):
-        self.forecast = LocalForecast(CACHE_DIR, cache_all_locations=cache_all_locations)
+    def __init__(self, forecast: LocalForecast):
+        """
+        Answer weather questions from a forecast data source.
+
+        The source is passed in rather than built here, so the caller decides where its cache
+        lives and how much it keeps, and tests can hand in one of their own.
+        """
+        self.forecast = forecast
 
     async def _resolve(self, location: str) -> Point:
         """Resolve a location name or postal code, off the event loop since it may download the table."""
