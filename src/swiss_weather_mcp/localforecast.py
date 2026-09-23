@@ -37,23 +37,13 @@ class Point(NamedTuple):
 
     @property
     def label(self) -> str:
-        """
-        Describe the point well enough that the caller can tell which one was picked.
-
-        A city name maps to many points, so the postal code and altitude are what distinguish
-        the village of Zermatt from its mountain station.
-        """
+        """Name the point with its postal code and altitude, such as "Zermatt 3920 (1610 m)"."""
         name = f"{self.name} {self.postal_code}" if self.postal_code else self.name
         return f"{name} ({self.altitude_m:.0f} m)"
 
     @property
     def row_prefix(self) -> bytes:
-        """
-        Return the start every data row of this point has, such as b"800100;2;".
-
-        The download keeps rows by this start and the reader finds them by it, so both must build
-        it the same way. Building it here is what guarantees that.
-        """
+        """The start every data row of this point has, such as b"800100;2;"."""
         return f"{self.point_id};{self.point_type_id};".encode()
 
 
@@ -65,11 +55,8 @@ class Series(NamedTuple):
 
 def _by_preference(point: Point) -> Tuple[bool, str, int]:
     """
-    Order candidates so a location always resolves to the same point.
-
-    Postal code centres come before stations, and the lowest code comes first, which is the
-    historic centre of a city. The point id breaks the remaining ties and is compared as a
-    number, because "100" sorts before "26" when compared as text.
+    Sort key for points with the same name: postal code centres before stations, then the
+    lowest postal code, which is the historic centre of a city, then the lowest point id.
     """
     return (not point.postal_code, point.postal_code, int(point.point_id))
 
@@ -94,13 +81,9 @@ def _parse_stamp(stamp: str) -> datetime:
 
 
 def _write_point_rows(response: requests.Response, point: Point, file: BinaryIO) -> None:
-    """
-    Write the rows of one point from a streamed response.
-
-    Megabyte chunks are split by hand rather than read with iter_lines(), which spends about
-    45 seconds per file walking a million lines one at a time.
-    """
+    """Write the rows of one point from a streamed response to a file."""
     prefix = point.row_prefix
+    # Chunks are split by hand, iter_lines() takes about 45 seconds for the million lines of a file
     remainder = b""
     for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
         lines = (remainder + chunk).split(b"\n")
@@ -116,16 +99,14 @@ def _download(url: str, target: Path, only_point: Optional[Point] = None) -> Non
     """
     Stream a file from MeteoSwiss to disk.
 
-    The file is written under a unique temporary name and moved into place only once complete, so
-    an interrupted download is never mistaken for a cached file, and two requests fetching the same
-    file at once do not write into each other.
-
     Parameters:
         url (str): The file to download.
         target (Path): Where the finished file ends up.
         only_point (Optional[Point]): Keep only this point's rows, or every line when None.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
+    # A unique name, moved into place only when complete, so an interrupted download is never
+    # taken for a cached file, and two requests for the same file do not write into each other
     partial_file = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
     try:
         with requests.get(url, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
@@ -142,14 +123,7 @@ def _download(url: str, target: Path, only_point: Optional[Point] = None) -> Non
 
 
 class LocalForecast:
-    """
-    Read point forecasts from the MeteoSwiss local forecasting collection.
-
-    MeteoSwiss publishes one CSV per parameter and model run, holding every hour of the forecast
-    window for every location. The hourly files are about 31 MB, so they are streamed and discarded,
-    and only the rows of the requested point are kept. A new run appears every hour under a new file
-    name, so a stored file can never go stale, only be superseded.
-    """
+    """Read point forecasts from the MeteoSwiss local forecasting collection, cached per model run."""
 
     def __init__(self, cache_dir: Path, cache_all_locations: bool = False):
         self.cache_dir = cache_dir
@@ -193,12 +167,8 @@ class LocalForecast:
         """
         Find the forecast point for a location name or a Swiss postal code.
 
-        Only exact matches are accepted. Near matching was measured to be actively misleading here:
-        "Wallis" is closest to "Wallisellen", a Zurich suburb 150 km from the canton it names, so a
-        best guess would answer confidently for the wrong side of the country.
-
-        A city spans several postal code areas, so the lowest code is used, which is the historic
-        centre. Locations without a postal code entry fall back to their weather station.
+        Case and accents are ignored, otherwise only exact matches count. When several points
+        match, the one with the lowest postal code is used, and a weather station otherwise.
 
         Parameters:
             location (str): Location name (e.g., "Zurich") or postal code (e.g., "8001").
@@ -209,6 +179,7 @@ class LocalForecast:
         points = self._load_points()
         wanted_name = _normalise(location)
 
+        # Exact matches only: the nearest name to "Wallis" is "Wallisellen", 150 km from the canton
         matches = [point for point in points if point.postal_code == wanted_name]
         if not matches:
             matches = [point for point in points if _normalise(point.name) == wanted_name]
@@ -238,11 +209,8 @@ class LocalForecast:
 
     def find_latest_run(self) -> Tuple[str, Dict[str, str]]:
         """
-        Find the newest published run and the parameter files it holds.
-
-        Tomorrow's item already exists but stays empty until its first run lands, hence the fall
-        back to the previous day. The answer is held briefly so that a tool needing six parameters
-        does not ask the API six times.
+        Find the newest published run and the parameter files it holds, reusing the answer for
+        RUN_LOOKUP_MAX_AGE.
 
         Returns:
             Tuple[str, Dict[str, str]]: The run stamp (YYYYMMDDHHMM) and its parameter file URLs.
@@ -251,6 +219,7 @@ class LocalForecast:
         if self.run_checked_at and now - self.run_checked_at < RUN_LOOKUP_MAX_AGE:
             return self.run_id, self.run_assets
 
+        # A day's item exists before its first run lands, so just after midnight it can be empty
         today = datetime.now(SWISS_TZ)
         for day in (today, today - timedelta(days=1)):
             assets_by_run = self._fetch_assets_by_run(day)
@@ -266,20 +235,8 @@ class LocalForecast:
         )
 
     def _drop_superseded_runs(self, current_run_id: str) -> None:
-        """
-        Remove the folders of runs that newer ones have replaced, keeping the run just before this
-        one.
-
-        Several server processes can share this cache, because with the stdio transport every
-        client session starts its own. Each remembers the newest run for up to RUN_LOOKUP_MAX_AGE,
-        so one process can still be reading the previous run while another has moved on. Deleting
-        that folder would pull the file out from under it. Runs are published about an hour apart,
-        measured at 57 to 62 minutes over two days, so a process is never more than one run behind
-        and keeping the previous run is enough. For the same reason, newer runs are never touched.
-
-        It runs after a successful download rather than on a timer. The run stamps are fixed width,
-        so comparing them as text compares them in time.
-        """
+        """Remove the folders of runs older than the current one, except the run just before it."""
+        # Run IDs are fixed width, so comparing them as text compares them in time
         older_runs = []
         for folder in (self.cache_dir / "runs").iterdir():
             if folder.is_dir() and folder.name < current_run_id:
@@ -287,26 +244,21 @@ class LocalForecast:
 
         older_runs.sort()
 
-        # The last of the older runs is the previous one, which another process may still read
+        # The last of the older runs is the previous one. With stdio every client session starts
+        # its own server process, and one may still read that run for up to RUN_LOOKUP_MAX_AGE.
+        # Runs are about an hour apart, so no process is more than one run behind.
         for folder in older_runs[:-1]:
             logger.info(f"Dropping superseded run {folder.name}")
             shutil.rmtree(folder, ignore_errors=True)
 
     def _get_cached_file(self, parameter: str, point: Point, run_id: str, url: str) -> Path:
-        """
-        Return the file holding this parameter for this run, fetching it if it is not there yet.
-
-        A run already on disk may have been stored either way round, so a full file is used when
-        one exists and a point extract otherwise. Only the current run's folder is looked in,
-        which makes a superseded file unreadable rather than merely unwanted.
-
-        Each folder is named after its MeteoSwiss run, such as 202609231100, which is UTC like every
-        MeteoSwiss timestamp. Swiss time would repeat an hour when the clocks go back in October.
-        """
+        """Return the cached file with this parameter for this point and run, downloading it if missing."""
+        # Named by the MeteoSwiss run ID, which is UTC: Swiss time repeats an hour in October
         run_dir = self.cache_dir / "runs" / run_id
         full_file = run_dir / f"{parameter}.csv"
         point_file = run_dir / f"{parameter}_{point.point_id}_{point.point_type_id}.csv"
 
+        # A full file from an earlier download serves every point
         if full_file.exists():
             return full_file
         if point_file.exists():
@@ -326,17 +278,13 @@ class LocalForecast:
         return target
 
     def _read_point_values(self, path: Path, point: Point) -> Dict[datetime, float]:
-        """
-        Read one point's values out of a cached file.
-
-        No header is skipped: a point extract has none, and a header line can never start with
-        the point prefix, so the same scan serves a full file and an extract alike.
-        """
+        """Read one point's values from a cached file, keyed by UTC timestamp."""
         prefix = point.row_prefix
         values: Dict[datetime, float] = {}
 
         with open(path, "rb") as file:
             for line in file:
+                # This also skips the header of a full file, a point extract has none
                 if not line.startswith(prefix):
                     continue
                 _, _, stamp, value = line.decode("latin-1").strip().split(";")
