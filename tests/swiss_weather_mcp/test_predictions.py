@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from swiss_weather_mcp.localforecast import LocalForecast
-from swiss_weather_mcp.predictions import MeteoSwissPredictions
+from swiss_weather_mcp.predictions import SwissWeatherPredictions
 
 POINT_TABLE_COLUMNS = (
     "point_id;point_type_id;station_abbr;postal_code;point_name;point_type_de;point_type_fr;"
@@ -109,9 +109,9 @@ def forecast_fixture(mocker, tmp_path):
 
 
 @pytest.fixture
-def meteo_fixture(forecast_fixture):
-    """Return a MeteoSwissPredictions reading from the fake data source."""
-    return MeteoSwissPredictions(forecast_fixture)
+def predictions_fixture(forecast_fixture):
+    """Return a SwissWeatherPredictions reading from the fake data source."""
+    return SwissWeatherPredictions(forecast_fixture)
 
 
 def _swiss(iso: str) -> datetime:
@@ -254,8 +254,8 @@ def test_series_explains_when_a_location_has_no_values(forecast_fixture):
 
 # ── weather values ───────────────────────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_temperature_reports_the_value_with_the_point_it_resolved(meteo_fixture):
-    result = await meteo_fixture.temp_for_location("Zurich", _swiss("2026-09-23T14:00"))
+async def test_temperature_reports_the_value_with_the_point_it_resolved(predictions_fixture):
+    result = await predictions_fixture.temperature_for_location("Zurich", _swiss("2026-09-23T14:00"))
 
     assert result["value"] == 12.0  # 14:00 Swiss in September is 12:00 UTC
     assert result["unit"] == "°C"
@@ -266,10 +266,10 @@ async def test_temperature_reports_the_value_with_the_point_it_resolved(meteo_fi
 
 
 @pytest.mark.asyncio
-async def test_sunshine_hours_adds_the_minutes_and_reports_hours(meteo_fixture):
+async def test_sunshine_hours_adds_the_minutes_and_reports_hours(predictions_fixture):
     # 08:00 to 16:00 Swiss is 06:00 to 14:00 UTC. The rows stamped 12:00 and 13:00 UTC fall inside:
     # 60 + 45 minutes. The row stamped 06:00 covers 05:00 to 06:00 UTC, before the period starts.
-    result = await meteo_fixture.sunshine_hours_for_location(
+    result = await predictions_fixture.sunshine_hours_for_location(
         "Zurich", _swiss("2026-09-23T08:00"), _swiss("2026-09-23T16:00")
     )
     assert result["value"] == 1.8
@@ -279,25 +279,25 @@ async def test_sunshine_hours_adds_the_minutes_and_reports_hours(meteo_fixture):
 
 
 @pytest.mark.asyncio
-async def test_a_window_counts_the_hours_by_the_stamp_at_their_end(meteo_fixture):
+async def test_a_window_counts_the_hours_by_the_stamp_at_their_end(predictions_fixture):
     # 14:00 to 15:00 Swiss is the row stamped 13:00 UTC, 45 minutes. The row stamped 12:00 UTC
     # covers 13:00 to 14:00 Swiss, the hour before the period, and must not be counted.
-    result = await meteo_fixture.sunshine_hours_for_location(
+    result = await predictions_fixture.sunshine_hours_for_location(
         "Zurich", _swiss("2026-09-23T14:00"), _swiss("2026-09-23T15:00")
     )
     assert result["value"] == 0.8
 
 
 @pytest.mark.asyncio
-async def test_a_time_inside_an_hour_reads_the_row_that_closes_that_hour(meteo_fixture):
+async def test_a_time_inside_an_hour_reads_the_row_that_closes_that_hour(predictions_fixture):
     # 14:30 Swiss lies in the hour 14:00 to 15:00, which is the row stamped 13:00 UTC
-    result = await meteo_fixture.temp_for_location("Zurich", _swiss("2026-09-23T14:30"))
+    result = await predictions_fixture.temperature_for_location("Zurich", _swiss("2026-09-23T14:30"))
     assert result["value"] == 14.5
 
 
 @pytest.mark.asyncio
-async def test_cloud_cover_combines_the_overlapping_layers(meteo_fixture):
-    result = await meteo_fixture.total_cloud_cover_for_location("Zurich", _swiss("2026-09-23T14:00"))
+async def test_cloud_cover_combines_the_overlapping_layers(predictions_fixture):
+    result = await predictions_fixture.total_cloud_cover_for_location("Zurich", _swiss("2026-09-23T14:00"))
 
     # Half the sky low and half high: clear only where both are clear, 1 - 0.5 * 0.5 = 75%
     assert result["value"] == 75.0
@@ -305,23 +305,23 @@ async def test_cloud_cover_combines_the_overlapping_layers(meteo_fixture):
 
 
 @pytest.mark.asyncio
-async def test_weather_description_turns_the_code_into_words(meteo_fixture):
-    result = await meteo_fixture.weather_description_for_location("Zurich", _swiss("2026-09-23T14:00"))
+async def test_weather_description_turns_the_code_into_words(predictions_fixture):
+    result = await predictions_fixture.weather_description_for_location("Zurich", _swiss("2026-09-23T14:00"))
 
     assert result["value"] == "mostly sunny, some clouds"
     assert result["pictogram_code"] == 2
 
 
 @pytest.mark.asyncio
-async def test_a_time_outside_the_forecast_names_the_range_that_is_covered(meteo_fixture):
+async def test_a_time_outside_the_forecast_names_the_range_that_is_covered(predictions_fixture):
     with pytest.raises(ValueError, match="outside the forecast"):
-        await meteo_fixture.temp_for_location("Zurich", _swiss("2026-10-30T14:00"))
+        await predictions_fixture.temperature_for_location("Zurich", _swiss("2026-10-30T14:00"))
 
 
 @pytest.mark.asyncio
-async def test_daily_forecast_reports_a_missing_parameter_instead_of_failing(meteo_fixture):
+async def test_daily_forecast_reports_a_missing_parameter_instead_of_failing(predictions_fixture):
     # Only tre200px is published in this fixture, the other daily parameters are absent
-    result = await meteo_fixture.daily_forecast_for_location("Zurich", _swiss("2026-09-23T00:00"))
+    result = await predictions_fixture.daily_forecast_for_location("Zurich", _swiss("2026-09-23T00:00"))
 
     assert result["temperature_max_c"] == 20.6
     assert result["rainfall_mm"] is None

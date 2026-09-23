@@ -14,7 +14,7 @@ from platformdirs import user_cache_path
 
 from . import LOG_LEVELS, setup_logging
 from .localforecast import SWISS_TZ, LocalForecast
-from .predictions import MeteoSwissPredictions
+from .predictions import SwissWeatherPredictions
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ def _handle_tool_call(tool: Callable[..., Awaitable[Dict[str, Any]]]) -> Callabl
     return run_tool
 
 
-class MeteoSwissMCPServer:
+class SwissWeatherMCPServer:
     def __init__(self, args: argparse.Namespace) -> None:
         self.host = args.host
         self.port = args.port
@@ -114,7 +114,7 @@ class MeteoSwissMCPServer:
         )
 
         forecast = LocalForecast(CACHE_DIR, cache_all_locations=args.cache_all_locations)
-        self.meteo = MeteoSwissPredictions(forecast)
+        self.predictions = SwissWeatherPredictions(forecast)
         self._register_tools()
 
     def _register_tools(self) -> None:
@@ -157,7 +157,7 @@ class MeteoSwissMCPServer:
                 daily_forecast("Zurich", "2026-09-23")
                 daily_forecast("8001", "2026-09-25")
             """
-            return await self.meteo.daily_forecast_for_location(location, _parse_swiss_time(date))
+            return await self.predictions.daily_forecast_for_location(location, _parse_swiss_time(date))
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -180,7 +180,7 @@ class MeteoSwissMCPServer:
                 weather_description("Zurich", "2026-09-23T14:00")
                 weather_description("Davos", "2026-09-24T08:00")
             """
-            return await self.meteo.weather_description_for_location(location, _parse_swiss_time(when))
+            return await self.predictions.weather_description_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -203,7 +203,7 @@ class MeteoSwissMCPServer:
                 temperature("Zurich", "2026-09-23T14:00")
                 temperature("Zermatt", "2026-09-25T07:00")
             """
-            return await self.meteo.temp_for_location(location, _parse_swiss_time(when))
+            return await self.predictions.temperature_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -226,7 +226,7 @@ class MeteoSwissMCPServer:
                 total_rainfall("Zurich", "2026-09-23T00:00", "2026-09-24T00:00")   # the whole day
                 total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T12:00")   # the morning
             """
-            return await self.meteo.total_rainfall_for_location(
+            return await self.predictions.total_rainfall_for_location(
                 location, _parse_swiss_time(start), _parse_swiss_time(end)
             )
 
@@ -252,7 +252,7 @@ class MeteoSwissMCPServer:
                 sunshine_hours("Zurich", "2026-09-23T00:00", "2026-09-24T00:00")   # the whole day
                 sunshine_hours("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")   # the afternoon
             """
-            return await self.meteo.sunshine_hours_for_location(
+            return await self.predictions.sunshine_hours_for_location(
                 location, _parse_swiss_time(start), _parse_swiss_time(end)
             )
 
@@ -277,7 +277,7 @@ class MeteoSwissMCPServer:
                 precipitation_probability("Zurich", "2026-09-23T14:00")
                 precipitation_probability("Lugano", "2026-09-24T18:00")
             """
-            return await self.meteo.precipitation_probability_for_location(location, _parse_swiss_time(when))
+            return await self.predictions.precipitation_probability_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -300,7 +300,7 @@ class MeteoSwissMCPServer:
                 precipitation_rate("Zurich", "2026-09-23T14:00")
                 precipitation_rate("Lugano", "2026-09-24T18:00")
             """
-            return await self.meteo.precipitation_rate_for_location(location, _parse_swiss_time(when))
+            return await self.predictions.precipitation_rate_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -323,7 +323,7 @@ class MeteoSwissMCPServer:
                 wind_speed("Zurich", "2026-09-23T14:00")
                 wind_speed("Säntis", "2026-09-24T12:00")
             """
-            return await self.meteo.wind_speed_for_location(location, _parse_swiss_time(when))
+            return await self.predictions.wind_speed_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -346,7 +346,7 @@ class MeteoSwissMCPServer:
                 wind_gusts("Zurich", "2026-09-23T14:00")
                 wind_gusts("Jungfraujoch", "2026-09-24T12:00")
             """
-            return await self.meteo.wind_gusts_for_location(location, _parse_swiss_time(when))
+            return await self.predictions.wind_gusts_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -369,7 +369,7 @@ class MeteoSwissMCPServer:
                 wind_direction("Zurich", "2026-09-23T14:00")
                 wind_direction("Altdorf", "2026-09-24T12:00")
             """
-            return await self.meteo.wind_direction_for_location(location, _parse_swiss_time(when))
+            return await self.predictions.wind_direction_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -397,7 +397,7 @@ class MeteoSwissMCPServer:
                 total_cloud_cover("Zurich", "2026-09-23T14:00")
                 total_cloud_cover("Locarno", "2026-09-24T09:00")
             """
-            return await self.meteo.total_cloud_cover_for_location(location, _parse_swiss_time(when))
+            return await self.predictions.total_cloud_cover_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -420,7 +420,7 @@ class MeteoSwissMCPServer:
                 freezing_level("Zermatt", "2026-09-23T14:00")
                 freezing_level("Davos", "2026-09-25T06:00")
             """
-            return await self.meteo.freezing_level_for_location(location, _parse_swiss_time(when))
+            return await self.predictions.freezing_level_for_location(location, _parse_swiss_time(when))
 
     def run(self):
         if self.transport == "stdio":
@@ -437,7 +437,7 @@ def main():
     try:
         args = _parse_args()
         setup_logging(args.log_level)
-        server = MeteoSwissMCPServer(args)
+        server = SwissWeatherMCPServer(args)
         server.run()
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt, shutting down.")

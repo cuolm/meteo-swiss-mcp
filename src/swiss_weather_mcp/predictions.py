@@ -80,7 +80,7 @@ def _compass_point(degrees: float) -> str:
     return COMPASS_POINTS[sector]
 
 
-class MeteoSwissPredictions:
+class SwissWeatherPredictions:
     def __init__(self, forecast: LocalForecast):
         """
         Answer weather questions from a forecast data source.
@@ -162,7 +162,7 @@ class MeteoSwissPredictions:
         value = self._value_at(series, when, point, parameter)
         return self._result(value, unit, point, series.run, valid_at=_valid_at(when))
 
-    async def temp_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+    async def temperature_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
         return await self._value_for_location(location, parameters.TEMPERATURE, when, "°C")
 
     async def wind_speed_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
