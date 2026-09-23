@@ -105,7 +105,6 @@ def forecast_fixture(mocker, tmp_path):
 
     get = mocker.patch("swiss_weather_mcp.localforecast.requests.get", side_effect=fake_get)
     forecast = LocalForecast(tmp_path)
-    forecast.published = published
     forecast.get = get
     return forecast
 

@@ -243,7 +243,10 @@ class LocalForecast:
         self.cache_dir = cache_dir
         self.cache_all_locations = cache_all_locations
         self.points: List[Point] = []
-        self.run_lookup: Optional[Tuple[datetime, str, Dict[str, str]]] = None
+        # The newest run, its parameter file URLs, and when that was last asked for
+        self.run: Optional[str] = None
+        self.run_assets: Dict[str, str] = {}
+        self.run_checked_at: Optional[datetime] = None
 
     def _point_table(self) -> Path:
         """Return the cached point table, downloading it when it is missing or stale."""
@@ -269,7 +272,7 @@ class LocalForecast:
                     point_type_id=row["point_type_id"],
                     name=row["point_name"],
                     postal_code=row["postal_code"],
-                    height_masl=float(row["point_height_masl"] or "nan"),
+                    height_masl=float(row["point_height_masl"]),
                 ))
         logger.info(f"Loaded {len(self.points)} forecast locations")
         return self.points
@@ -332,17 +335,19 @@ class LocalForecast:
         Returns:
             Tuple[str, Dict[str, str]]: The run stamp (YYYYMMDDHHMM) and its parameter file URLs.
         """
-        if self.run_lookup and datetime.now(timezone.utc) - self.run_lookup[0] < RUN_LOOKUP_MAX_AGE:
-            return self.run_lookup[1], self.run_lookup[2]
+        now = datetime.now(timezone.utc)
+        if self.run_checked_at and now - self.run_checked_at < RUN_LOOKUP_MAX_AGE:
+            return self.run, self.run_assets
 
         today = datetime.now(SWISS_TZ)
         for day in (today, today - timedelta(days=1)):
             by_run = self._assets_by_run(day)
             if by_run:
                 # The stamp is fixed width and zero padded, so the newest run is the largest string
-                run = max(by_run)
-                self.run_lookup = (datetime.now(timezone.utc), run, by_run[run])
-                return run, by_run[run]
+                self.run = max(by_run)
+                self.run_assets = by_run[self.run]
+                self.run_checked_at = now
+                return self.run, self.run_assets
 
         raise RuntimeError(
             "The MeteoSwiss local forecasting collection published no run for today or yesterday"

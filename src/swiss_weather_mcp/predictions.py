@@ -19,6 +19,13 @@ CACHE_DIR = Path(os.environ.get("SWISS_WEATHER_MCP_CACHE_DIR", user_cache_path("
 COMPASS_POINTS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
                   "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
 
+# The three cloud layers MeteoSwiss publishes separately, lowest first
+CLOUD_LAYERS = (
+    ("low", "nprolohs"),
+    ("medium", "npromths"),
+    ("high", "nprohihs"),
+)
+
 # Which daily parameter answers which field of the daily forecast
 DAILY_PARAMETERS = (
     ("temperature_min_c", "tre200pn"),
@@ -191,7 +198,7 @@ class MeteoSwissPredictions:
         point = await self._resolve(location)
         layers = {}
         run = None
-        for name, parameter in (("low", "nprolohs"), ("medium", "npromths"), ("high", "nprohihs")):
+        for name, parameter in CLOUD_LAYERS:
             series = await self._series(parameter, point)
             layers[name] = self._value_at(series, when, point, parameter)
             run = series.run
@@ -239,7 +246,7 @@ class MeteoSwissPredictions:
         logger.info(f"daily_forecast: {parameter} does not reach {day} for {point.label()}")
         return None, series.run
 
-    async def daily_forecast_for_location(self, location: str, date: datetime) -> Dict[str, Any]:
+    async def daily_forecast_for_location(self, location: str, day: datetime) -> Dict[str, Any]:
         """
         Read the whole-day summary for a location.
 
@@ -248,7 +255,7 @@ class MeteoSwissPredictions:
 
         Parameters:
             location (str): Location name or postal code.
-            date (datetime): Any moment on the day wanted, timezone aware.
+            day (datetime): Any moment on the day wanted, timezone aware.
 
         Returns:
             Dict[str, Any]: Minimum and maximum temperature, rainfall with its 10% and 90% range, a
@@ -256,17 +263,17 @@ class MeteoSwissPredictions:
                 publish for this location are None.
         """
         point = await self._resolve(location)
-        day = date.astimezone(SWISS_TZ).date()
+        calendar_day = day.astimezone(SWISS_TZ).date()
 
         summary: Dict[str, Any] = {
             "location": point.label(),
             "altitude_m": point.height_masl,
-            "date": day.isoformat(),
+            "date": calendar_day.isoformat(),
         }
 
         run: Optional[datetime] = None
         for field, parameter in DAILY_PARAMETERS:
-            value, parameter_run = await self._daily_value(parameter, point, day)
+            value, parameter_run = await self._daily_value(parameter, point, calendar_day)
             run = parameter_run or run
             summary[field] = value
 
