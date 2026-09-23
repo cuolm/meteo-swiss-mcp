@@ -16,8 +16,7 @@ venv/
 .github/
 .gitignore
 
-# Exclude logs and cache folders
-EarthKitCache/
+# Exclude logs
 *.log
 
 # Exclude test folders
