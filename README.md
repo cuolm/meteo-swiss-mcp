@@ -185,7 +185,7 @@ altitude, the time it applies to, and the model run the forecast came from.
 | Tool | Purpose | Example Call |
 |------|---------|--------------|
 | `current_date_and_time()` | Current date and time in Swiss local time | `current_date_and_time()` |
-| `daily_forecast(location, date)` | Whole day: min/max temperature, rainfall with its 10–90% range, worded summary | `daily_forecast("Zurich", "2026-09-23")` |
+| `daily_forecast(location, date)` | Whole day: min/max temperature, median rainfall with its 10th and 90th percentile, worded summary | `daily_forecast("Zurich", "2026-09-23")` |
 | `weather_description(location, when)` | The weather in words, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
 | `temperature(location, when)` | Air temperature (°C), mean of the hour up to that time, 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
 | `total_rainfall(location, start, end)` | Rainfall (mm) summed over a period | `total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |

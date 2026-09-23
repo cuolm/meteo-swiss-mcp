@@ -148,10 +148,11 @@ class SwissWeatherMCPServer:
                 date (str): The day, e.g. "2026-09-23". Up to 9 days ahead.
 
             Returns:
-                dict: Minimum and maximum temperature in Celsius, total rainfall in millimetres with
-                    its 10% and 90% range, a worded weather summary, the resolved location with its
-                    altitude, and the model run. A value is None when MeteoSwiss does not publish it
-                    for that location.
+                dict: Minimum and maximum temperature in Celsius; the day's rainfall in millimetres
+                    as its median and its 10th and 90th percentile, meaning a 90% chance of at least
+                    the 10th-percentile amount and at most the 90th-percentile amount; a worded
+                    weather summary, the resolved location with its altitude, and the model run.
+                    A value is None when MeteoSwiss does not publish it for that location.
 
             Examples:
                 daily_forecast("Zurich", "2026-09-23")
