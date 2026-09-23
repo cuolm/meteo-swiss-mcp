@@ -224,13 +224,25 @@ def test_series_reads_the_same_values_from_a_full_file(forecast_fixture, tmp_pat
     assert forecast_fixture.series("tre200h0", point).values == from_extract
 
 
-def test_series_drops_runs_that_have_been_superseded(forecast_fixture, tmp_path):
-    superseded = tmp_path / "runs" / EARLIER_RUN
-    superseded.mkdir(parents=True)
-    (superseded / "tre200h0_800100_2.csv").write_bytes(b"stale")
+def test_series_drops_runs_older_than_the_previous_one(forecast_fixture, tmp_path):
+    for run in ("202609221100", EARLIER_RUN):
+        superseded = tmp_path / "runs" / run
+        superseded.mkdir(parents=True)
+        (superseded / "tre200h0_800100_2.csv").write_bytes(b"stale")
 
     forecast_fixture.series("tre200h0", forecast_fixture.resolve("Zürich"))
-    assert [path.name for path in (tmp_path / "runs").iterdir()] == [RUN]
+    # 12:00 stays, another server process may still be reading it until it sees the 13:00 run
+    assert sorted(path.name for path in (tmp_path / "runs").iterdir()) == [EARLIER_RUN, RUN]
+
+
+def test_series_keeps_a_newer_run_written_by_another_process(forecast_fixture, tmp_path):
+    # Another server process on the same cache already moved on to a later run
+    newer = tmp_path / "runs" / "202609221400"
+    newer.mkdir(parents=True)
+    (newer / "tre200h0_800100_2.csv").write_bytes(b"newer")
+
+    forecast_fixture.series("tre200h0", forecast_fixture.resolve("Zürich"))
+    assert sorted(path.name for path in (tmp_path / "runs").iterdir()) == [RUN, "202609221400"]
 
 
 def test_series_leaves_no_partial_file_behind(forecast_fixture, tmp_path):
