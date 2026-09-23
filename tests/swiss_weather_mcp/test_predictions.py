@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -332,9 +332,16 @@ async def test_a_time_outside_the_forecast_names_the_range_that_is_covered(predi
 
 
 @pytest.mark.asyncio
+async def test_daily_forecast_refuses_a_day_outside_the_forecast(predictions_fixture):
+    # Every parameter exists, but none reaches that day, so there is nothing to answer with
+    with pytest.raises(ValueError, match="no daily forecast"):
+        await predictions_fixture.daily_forecast_for_location("Zurich", date(2026, 10, 30))
+
+
+@pytest.mark.asyncio
 async def test_daily_forecast_reports_a_missing_parameter_instead_of_failing(predictions_fixture):
     # Only tre200px is published in this fixture, the other daily parameters are absent
-    result = await predictions_fixture.daily_forecast_for_location("Zurich", _swiss_time("2026-09-23T00:00"))
+    result = await predictions_fixture.daily_forecast_for_location("Zurich", date(2026, 9, 23))
 
     assert result["temperature_max_c"] == 20.6
     assert result["rainfall_median_mm"] is None

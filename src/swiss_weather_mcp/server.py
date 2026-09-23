@@ -160,7 +160,9 @@ class SwissWeatherMCPServer:
                 daily_forecast("Zurich", "2026-09-23")
                 daily_forecast("8001", "2026-09-25")
             """
-            return await self.predictions.daily_forecast_for_location(location, _parse_swiss_time(date))
+            return await self.predictions.daily_forecast_for_location(
+                location, _parse_swiss_time(date).astimezone(SWISS_TZ).date()
+            )
 
         @self.mcp.tool()
         @_handle_tool_call
