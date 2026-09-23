@@ -271,23 +271,32 @@ async def test_temperature_reports_the_value_with_the_point_it_resolved(meteo_fi
 
 @pytest.mark.asyncio
 async def test_sunshine_hours_adds_the_minutes_and_reports_hours(meteo_fixture):
-    # 08:00 to 16:00 Swiss covers 06:00, 12:00 and 13:00 UTC: 30 + 60 + 45 minutes
+    # 08:00 to 16:00 Swiss is 06:00 to 14:00 UTC. The rows stamped 12:00 and 13:00 UTC fall inside:
+    # 60 + 45 minutes. The row stamped 06:00 covers 05:00 to 06:00 UTC, before the period starts.
     result = await meteo_fixture.sunshine_hours_for_location(
         "Zurich", _swiss("2026-09-23T08:00"), _swiss("2026-09-23T16:00")
     )
-    assert result["value"] == 2.2
+    assert result["value"] == 1.8
     assert result["unit"] == "h"
     assert result["from"] == "2026-09-23T08:00+02:00"
     assert result["to"] == "2026-09-23T16:00+02:00"
 
 
 @pytest.mark.asyncio
-async def test_a_window_excludes_the_hour_it_ends_on(meteo_fixture):
-    # 14:00 to 15:00 Swiss is 12:00 UTC alone, so the 13:00 UTC value must not be counted
+async def test_a_window_counts_the_hours_by_the_stamp_at_their_end(meteo_fixture):
+    # 14:00 to 15:00 Swiss is the row stamped 13:00 UTC, 45 minutes. The row stamped 12:00 UTC
+    # covers 13:00 to 14:00 Swiss, the hour before the period, and must not be counted.
     result = await meteo_fixture.sunshine_hours_for_location(
         "Zurich", _swiss("2026-09-23T14:00"), _swiss("2026-09-23T15:00")
     )
-    assert result["value"] == 1.0
+    assert result["value"] == 0.8
+
+
+@pytest.mark.asyncio
+async def test_a_time_inside_an_hour_reads_the_row_that_closes_that_hour(meteo_fixture):
+    # 14:30 Swiss lies in the hour 14:00 to 15:00, which is the row stamped 13:00 UTC
+    result = await meteo_fixture.temp_for_location("Zurich", _swiss("2026-09-23T14:30"))
+    assert result["value"] == 14.5
 
 
 @pytest.mark.asyncio
