@@ -162,7 +162,7 @@ class LocalForecast:
         """Return the cached point table, downloading it when it is missing or stale."""
         table = self.cache_dir / "ogd-local-forecasting_meta_point.csv"
         if table.exists():
-            age = datetime.now() - datetime.fromtimestamp(table.stat().st_mtime)
+            age = datetime.now(timezone.utc) - datetime.fromtimestamp(table.stat().st_mtime, timezone.utc)
             if age < POINT_TABLE_MAX_AGE:
                 return table
 
@@ -297,6 +297,9 @@ class LocalForecast:
         A run already on disk may have been stored either way round, so a full file is used when
         one exists and a point extract otherwise. Only the current run's folder is looked in,
         which makes a superseded file unreadable rather than merely unwanted.
+
+        Each folder is named after its MeteoSwiss run, such as 202609231100, which is UTC like every
+        MeteoSwiss timestamp. Swiss time would repeat an hour when the clocks go back in October.
         """
         run_dir = self.cache_dir / "runs" / run
         full_file = run_dir / f"{parameter}.csv"
