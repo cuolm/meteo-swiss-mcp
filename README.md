@@ -179,15 +179,15 @@ The bundled MCP client can be used to test the server over the stdio transport. 
 
 ## Available Tools
 
-All tools take a `location` (a name such as `"Zurich"`, or a Swiss postal code such as `"8001"`) and a
-Swiss local timestamp. Every tool returns the value together with the location it resolved, its
-altitude, the time it applies to, and the model run the forecast came from.
+The forecast tools take a `location` (a name such as `"Zurich"`, or a Swiss postal code such as `"8001"`)
+and a Swiss local time, or a date for `daily_forecast`. They return the value together with the location
+they resolved, its altitude, the time or day it applies to, and the model run the forecast came from.
 
 | Tool | Purpose | Example Call |
 |------|---------|--------------|
 | `current_date_and_time()` | Today's weekday and the Swiss time now, in the form the tools accept | `current_date_and_time()` |
 | `daily_forecast(location, date)` | Whole day: lowest and highest hourly temperature, median rainfall with its 10th and 90th percentile, daytime weather in words | `daily_forecast("Zurich", "2026-09-23")` |
-| `weather_description(location, when)` | The weather in words, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
+| `weather_description(location, when)` | The weather in words for the 3 hours up to that time, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
 | `temperature(location, when)` | Air temperature (°C), mean of the hour up to that time, 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
 | `total_rainfall(location, start, end)` | Most likely rainfall (mm) of each hour, summed over a period | `total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
 | `sunshine_hours(location, start, end)` | Sunshine (h) summed over a period | `sunshine_hours("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
@@ -196,7 +196,7 @@ altitude, the time it applies to, and the model run the forecast came from.
 | `wind_speed(location, when)` | Wind speed (km/h), mean of the hour up to that time | `wind_speed("Zurich", "2026-09-23T14:00")` |
 | `wind_gusts(location, when)` | Strongest one-second gust (km/h) in the hour up to that time | `wind_gusts("Säntis", "2026-09-23T14:00")` |
 | `wind_direction(location, when)` | Direction the wind blows from, in degrees and as a compass point | `wind_direction("Zurich", "2026-09-23T14:00")` |
-| `total_cloud_cover(location, when)` | Cloud cover (%) plus the low, medium and high layers | `total_cloud_cover("Zurich", "2026-09-23T14:00")` |
+| `total_cloud_cover(location, when)` | Estimated total cloud cover (%) plus the low, medium and high layers | `total_cloud_cover("Zurich", "2026-09-23T14:00")` |
 | `freezing_level(location, when)` | Height of the 0 °C line (m above sea level) | `freezing_level("Zermatt", "2026-09-23T14:00")` |
 
 **Time**
