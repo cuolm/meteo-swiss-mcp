@@ -3,7 +3,8 @@ import logging
 import sys
 from datetime import datetime
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from . import LOG_LEVELS, setup_logging
 from .localforecast import SWISS_TZ
@@ -64,12 +65,9 @@ class MeteoSwissMCPServer:
         self.host = args.host
         self.port = args.port
         self.transport = args.transport
-        self.mcp = FastMCP(
+        self.mcp = MCPServer(
             name="swiss_weather_mcp_server",
             instructions="This MCP server provides hourly weather forecast data for Switzerland for up to 9 days ahead.",
-            host=self.host,
-            port=self.port,
-            stateless_http=True,
             log_level=args.log_level,  # forwarded to uvicorn, which configures its own loggers
         )
 
@@ -121,7 +119,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get the daily forecast for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get the daily forecast for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get the daily forecast for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def weather_description(location: str, when: str) -> dict:
@@ -149,7 +147,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get the weather description for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get the weather description for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get the weather description for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def temperature(location: str, when: str) -> dict:
@@ -177,7 +175,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get temperature for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get temperature for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get temperature for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def total_rainfall(location: str, start: str, end: str) -> dict:
@@ -207,7 +205,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get total rainfall for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get total rainfall for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get total rainfall for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def sunshine_hours(location: str, start: str, end: str) -> dict:
@@ -238,7 +236,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get sunshine hours for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get sunshine hours for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get sunshine hours for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def precipitation_probability(location: str, when: str) -> dict:
@@ -266,7 +264,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get precipitation probability for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get precipitation probability for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get precipitation probability for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def precipitation_rate(location: str, when: str) -> dict:
@@ -294,7 +292,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get precipitation rate for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get precipitation rate for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get precipitation rate for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def wind_speed(location: str, when: str) -> dict:
@@ -322,7 +320,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get wind speed for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get wind speed for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get wind speed for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def wind_gusts(location: str, when: str) -> dict:
@@ -350,7 +348,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get wind gusts for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get wind gusts for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get wind gusts for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def wind_direction(location: str, when: str) -> dict:
@@ -378,7 +376,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get wind direction for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get wind direction for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get wind direction for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def total_cloud_cover(location: str, when: str) -> dict:
@@ -411,7 +409,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get total cloud cover for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get total cloud cover for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get total cloud cover for location '{location}': {error}") from error
 
         @self.mcp.tool()
         async def freezing_level(location: str, when: str) -> dict:
@@ -439,7 +437,7 @@ class MeteoSwissMCPServer:
                 return result
             except Exception as error:
                 logger.exception(f"Failed to get the freezing level for location '{location}': {error}")
-                raise RuntimeError(f"Failed to get the freezing level for location '{location}': {error}") from error
+                raise ToolError(f"Failed to get the freezing level for location '{location}': {error}") from error
 
     def run(self):
         if self.transport == "stdio":
@@ -447,7 +445,7 @@ class MeteoSwissMCPServer:
             self.mcp.run(transport="stdio")
         elif self.transport == "streamable-http":
             logger.info("Running server with Streamable HTTP transport")
-            self.mcp.run(transport="streamable-http")
+            self.mcp.run(transport="streamable-http", host=self.host, port=self.port, stateless_http=True)
         else:
             raise ValueError(f"Unknown transport: {self.transport}")
 

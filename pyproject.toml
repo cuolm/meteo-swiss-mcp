@@ -21,7 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "mcp>=1.13.1,<2",  # mcp 2.x renames FastMCP to MCPServer and changes the tool API
+    "mcp>=2.2,<3",
     "platformdirs>=4.11.4",
     "requests>=2.32.0",
 ]
