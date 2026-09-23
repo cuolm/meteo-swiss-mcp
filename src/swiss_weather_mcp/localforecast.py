@@ -33,8 +33,9 @@ class Point(NamedTuple):
     point_type_id: str
     name: str
     postal_code: str
-    height_masl: float
+    altitude_m: float
 
+    @property
     def label(self) -> str:
         """
         Describe the point well enough that the caller can tell which one was picked.
@@ -43,9 +44,10 @@ class Point(NamedTuple):
         the village of Zermatt from its mountain station.
         """
         name = f"{self.name} {self.postal_code}" if self.postal_code else self.name
-        return f"{name} ({self.height_masl:.0f} m)"
+        return f"{name} ({self.altitude_m:.0f} m)"
 
-    def prefix(self) -> bytes:
+    @property
+    def row_prefix(self) -> bytes:
         """
         Return the start every data row of this point has, such as b"800100;2;".
 
@@ -57,11 +59,11 @@ class Point(NamedTuple):
 
 class Series(NamedTuple):
     """One parameter over the whole forecast window at one point, with the run it came from."""
-    run: datetime
+    run_time: datetime
     values: Dict[datetime, float]
 
 
-def _preference(point: Point) -> Tuple[bool, str, int]:
+def _by_preference(point: Point) -> Tuple[bool, str, int]:
     """
     Order candidates so a location always resolves to the same point.
 
@@ -98,7 +100,7 @@ def _write_point_rows(response: requests.Response, point: Point, file: BinaryIO)
     Megabyte chunks are split by hand rather than read with iter_lines(), which spends about
     45 seconds per file walking a million lines one at a time.
     """
-    prefix = point.prefix()
+    prefix = point.row_prefix
     remainder = b""
     for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
         lines = (remainder + chunk).split(b"\n")
@@ -110,7 +112,7 @@ def _write_point_rows(response: requests.Response, point: Point, file: BinaryIO)
         file.write(remainder + b"\n")
 
 
-def _download(url: str, target: Path, point: Optional[Point] = None) -> None:
+def _download(url: str, target: Path, only_point: Optional[Point] = None) -> None:
     """
     Stream a file from MeteoSwiss to disk.
 
@@ -121,22 +123,22 @@ def _download(url: str, target: Path, point: Optional[Point] = None) -> None:
     Parameters:
         url (str): The file to download.
         target (Path): Where the finished file ends up.
-        point (Optional[Point]): Keep only this point's rows, or every line when None.
+        only_point (Optional[Point]): Keep only this point's rows, or every line when None.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
-    download = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
+    partial_file = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
     try:
         with requests.get(url, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             response.raise_for_status()
-            with open(download, "wb") as file:
-                if point is None:
+            with open(partial_file, "wb") as file:
+                if only_point is None:
                     for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
                         file.write(chunk)
                 else:
-                    _write_point_rows(response, point, file)
-        download.replace(target)
+                    _write_point_rows(response, only_point, file)
+        partial_file.replace(target)
     finally:
-        download.unlink(missing_ok=True)
+        partial_file.unlink(missing_ok=True)
 
 
 class LocalForecast:
@@ -154,11 +156,11 @@ class LocalForecast:
         self.cache_all_locations = cache_all_locations
         self.points: List[Point] = []
         # The newest run, its parameter file URLs, and when that was last asked for
-        self.run: Optional[str] = None
+        self.run_id: Optional[str] = None
         self.run_assets: Dict[str, str] = {}
         self.run_checked_at: Optional[datetime] = None
 
-    def _point_table(self) -> Path:
+    def _ensure_point_table(self) -> Path:
         """Return the cached point table, downloading it when it is missing or stale."""
         table = self.cache_dir / "ogd-local-forecasting_meta_point.csv"
         if table.exists():
@@ -175,19 +177,19 @@ class LocalForecast:
         if self.points:
             return self.points
 
-        with open(self._point_table(), newline="", encoding="latin-1") as file:
+        with open(self._ensure_point_table(), newline="", encoding="latin-1") as file:
             for row in csv.DictReader(file, delimiter=";"):
                 self.points.append(Point(
                     point_id=row["point_id"],
                     point_type_id=row["point_type_id"],
                     name=row["point_name"],
                     postal_code=row["postal_code"],
-                    height_masl=float(row["point_height_masl"]),
+                    altitude_m=float(row["point_height_masl"]),
                 ))
         logger.info(f"Loaded {len(self.points)} forecast locations")
         return self.points
 
-    def resolve(self, location: str) -> Point:
+    def find_point(self, location: str) -> Point:
         """
         Find the forecast point for a location name or a Swiss postal code.
 
@@ -205,20 +207,20 @@ class LocalForecast:
             Point: The resolved forecast point.
         """
         points = self._load_points()
-        wanted = _normalise(location)
+        wanted_name = _normalise(location)
 
-        matches = [point for point in points if point.postal_code == wanted]
+        matches = [point for point in points if point.postal_code == wanted_name]
         if not matches:
-            matches = [point for point in points if _normalise(point.name) == wanted]
+            matches = [point for point in points if _normalise(point.name) == wanted_name]
         if not matches:
             raise ValueError(
                 f"Location '{location}' is not one of the {len(points)} places MeteoSwiss publishes "
                 f"forecasts for. Check the spelling, or try a nearby town, village or postal code."
             )
 
-        return min(matches, key=_preference)
+        return min(matches, key=_by_preference)
 
-    def _assets_by_run(self, day: datetime) -> Dict[str, Dict[str, str]]:
+    def _fetch_assets_by_run(self, day: datetime) -> Dict[str, Dict[str, str]]:
         """Return one daily STAC item's assets, grouped by run and keyed by parameter."""
         item_url = f"{STAC_BASE_URL}/collections/{COLLECTION_ID}/items/{day.strftime('%Y%m%d')}-ch"
         response = requests.get(item_url, timeout=REQUEST_TIMEOUT_SECONDS)
@@ -226,15 +228,15 @@ class LocalForecast:
             return {}
         response.raise_for_status()
 
-        by_run: Dict[str, Dict[str, str]] = {}
+        assets_by_run: Dict[str, Dict[str, str]] = {}
         for key, asset in response.json().get("assets", {}).items():
             # Asset names look like vnut12.lssw.<run>.<parameter>.csv
             parts = key.split(".")
             if len(parts) == 5:
-                by_run.setdefault(parts[2], {})[parts[3]] = asset["href"]
-        return by_run
+                assets_by_run.setdefault(parts[2], {})[parts[3]] = asset["href"]
+        return assets_by_run
 
-    def latest_run(self) -> Tuple[str, Dict[str, str]]:
+    def find_latest_run(self) -> Tuple[str, Dict[str, str]]:
         """
         Find the newest published run and the parameter files it holds.
 
@@ -247,23 +249,23 @@ class LocalForecast:
         """
         now = datetime.now(timezone.utc)
         if self.run_checked_at and now - self.run_checked_at < RUN_LOOKUP_MAX_AGE:
-            return self.run, self.run_assets
+            return self.run_id, self.run_assets
 
         today = datetime.now(SWISS_TZ)
         for day in (today, today - timedelta(days=1)):
-            by_run = self._assets_by_run(day)
-            if by_run:
+            assets_by_run = self._fetch_assets_by_run(day)
+            if assets_by_run:
                 # The stamp is fixed width and zero padded, so the newest run is the largest string
-                self.run = max(by_run)
-                self.run_assets = by_run[self.run]
+                self.run_id = max(assets_by_run)
+                self.run_assets = assets_by_run[self.run_id]
                 self.run_checked_at = now
-                return self.run, self.run_assets
+                return self.run_id, self.run_assets
 
         raise RuntimeError(
             "The MeteoSwiss local forecasting collection published no run for today or yesterday"
         )
 
-    def _drop_superseded_runs(self, current_run: str) -> None:
+    def _drop_superseded_runs(self, current_run_id: str) -> None:
         """
         Remove the folders of runs that newer ones have replaced, keeping the run just before this
         one.
@@ -280,7 +282,7 @@ class LocalForecast:
         """
         older_runs = []
         for folder in (self.cache_dir / "runs").iterdir():
-            if folder.is_dir() and folder.name < current_run:
+            if folder.is_dir() and folder.name < current_run_id:
                 older_runs.append(folder)
 
         older_runs.sort()
@@ -290,7 +292,7 @@ class LocalForecast:
             logger.info(f"Dropping superseded run {folder.name}")
             shutil.rmtree(folder, ignore_errors=True)
 
-    def _cached_file(self, parameter: str, point: Point, run: str, url: str) -> Path:
+    def _get_cached_file(self, parameter: str, point: Point, run_id: str, url: str) -> Path:
         """
         Return the file holding this parameter for this run, fetching it if it is not there yet.
 
@@ -301,7 +303,7 @@ class LocalForecast:
         Each folder is named after its MeteoSwiss run, such as 202609231100, which is UTC like every
         MeteoSwiss timestamp. Swiss time would repeat an hour when the clocks go back in October.
         """
-        run_dir = self.cache_dir / "runs" / run
+        run_dir = self.cache_dir / "runs" / run_id
         full_file = run_dir / f"{parameter}.csv"
         point_file = run_dir / f"{parameter}_{point.point_id}_{point.point_type_id}.csv"
 
@@ -312,25 +314,25 @@ class LocalForecast:
 
         # The published file holds every location and runs to tens of megabytes. By default only
         # this point's rows are kept, a few kilobytes, and the rest is discarded while streaming.
-        logger.info(f"Reading {parameter} for {point.label()} from run {run}")
+        logger.info(f"Reading {parameter} for {point.label} from run {run_id}")
         if self.cache_all_locations:
             _download(url, full_file)
             target = full_file
         else:
-            _download(url, point_file, point=point)
+            _download(url, point_file, only_point=point)
             target = point_file
 
-        self._drop_superseded_runs(run)
+        self._drop_superseded_runs(run_id)
         return target
 
-    def _read_values(self, path: Path, point: Point) -> Dict[datetime, float]:
+    def _read_point_values(self, path: Path, point: Point) -> Dict[datetime, float]:
         """
         Read one point's values out of a cached file.
 
         No header is skipped: a point extract has none, and a header line can never start with
         the point prefix, so the same scan serves a full file and an extract alike.
         """
-        prefix = point.prefix()
+        prefix = point.row_prefix
         values: Dict[datetime, float] = {}
 
         with open(path, "rb") as file:
@@ -345,7 +347,7 @@ class LocalForecast:
 
         return values
 
-    def series(self, parameter: str, point: Point) -> Series:
+    def read_series(self, parameter: str, point: Point) -> Series:
         """
         Read one parameter over the whole forecast window at one point.
 
@@ -356,18 +358,18 @@ class LocalForecast:
         Returns:
             Series: The run the values came from, and the values keyed by UTC timestamp.
         """
-        run, assets = self.latest_run()
+        run_id, assets = self.find_latest_run()
         if parameter not in assets:
             # The run and the published codes help whoever finds out what MeteoSwiss changed, but mean
             # nothing to the model reading the error, so they go to the log only
-            logger.warning(f"Run {run} does not publish '{parameter}', it has: {', '.join(sorted(assets))}")
+            logger.warning(f"Run {run_id} does not publish '{parameter}', it has: {', '.join(sorted(assets))}")
             raise ValueError(f"MeteoSwiss's newest forecast does not include '{parameter}'.")
 
-        values = self._read_values(self._cached_file(parameter, point, run, assets[parameter]), point)
+        values = self._read_point_values(self._get_cached_file(parameter, point, run_id, assets[parameter]), point)
         if not values:
             raise ValueError(
-                f"MeteoSwiss publishes no '{parameter}' values for {point.label()}. Some entries, "
+                f"MeteoSwiss publishes no '{parameter}' values for {point.label}. Some entries, "
                 f"such as the regional ones, only carry part of the forecast, try a nearby town."
             )
 
-        return Series(run=_parse_stamp(run), values=values)
+        return Series(run_time=_parse_stamp(run_id), values=values)

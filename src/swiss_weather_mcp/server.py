@@ -47,7 +47,7 @@ def _parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-def _parse_swiss_time(value: str) -> datetime:
+def _parse_swiss_time(timestamp: str) -> datetime:
     """
     Read an ISO timestamp as Swiss local time.
 
@@ -56,16 +56,16 @@ def _parse_swiss_time(value: str) -> datetime:
     explicit offset is honoured as given.
 
     Parameters:
-        value (str): ISO timestamp, e.g. "2026-09-23T14:00", or a date, e.g. "2026-09-23".
+        timestamp (str): ISO timestamp, e.g. "2026-09-23T14:00", or a date, e.g. "2026-09-23".
 
     Returns:
         datetime: The same instant, timezone aware.
     """
     try:
-        parsed = datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(timestamp)
     except ValueError as error:
         raise ValueError(
-            f"'{value}' is not a valid timestamp, use for example '2026-09-23T14:00' or '2026-09-23'"
+            f"'{timestamp}' is not a valid timestamp, use for example '2026-09-23T14:00' or '2026-09-23'"
         ) from error
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=SWISS_TZ)
 
