@@ -6,8 +6,12 @@ on:
 
 jobs:
   test:
-    name: Pytest
+    name: Pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # report every version, rather than cancel the rest after one failure
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]  # keep in line with the classifiers in pyproject.toml
     steps:
       - uses: actions/checkout@v5
         with:
@@ -15,7 +19,7 @@ jobs:
       - name: Install uv and Set up Python
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
           enable-cache: true
       - name: Install Dependencies
         run: uv sync --group dev
