@@ -3,7 +3,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from swiss_weather_mcp import predictions
 from swiss_weather_mcp.localforecast import LocalForecast
 from swiss_weather_mcp.predictions import MeteoSwissPredictions
 
@@ -110,12 +109,9 @@ def forecast_fixture(mocker, tmp_path):
 
 
 @pytest.fixture
-def meteo_fixture(mocker, tmp_path, forecast_fixture):
-    """Return a MeteoSwissPredictions whose cache lives in a temporary directory."""
-    mocker.patch.object(predictions, "CACHE_DIR", tmp_path)
-    meteo = MeteoSwissPredictions()
-    meteo.forecast = forecast_fixture
-    return meteo
+def meteo_fixture(forecast_fixture):
+    """Return a MeteoSwissPredictions reading from the fake data source."""
+    return MeteoSwissPredictions(forecast_fixture)
 
 
 def _swiss(iso: str) -> datetime:

@@ -1,16 +1,23 @@
 import argparse
 import logging
+import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from platformdirs import user_cache_path
 
 from . import LOG_LEVELS, setup_logging
-from .localforecast import SWISS_TZ
+from .localforecast import SWISS_TZ, LocalForecast
 from .predictions import MeteoSwissPredictions
 
 logger = logging.getLogger(__name__)
+
+# Shared, OS-standard cache location (survives across working directories the server may be launched from).
+# Override with SWISS_WEATHER_MCP_CACHE_DIR, e.g. to isolate cache location in tests or Docker.
+CACHE_DIR = Path(os.environ.get("SWISS_WEATHER_MCP_CACHE_DIR", user_cache_path("swiss-weather-mcp")))
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MCP Server")
@@ -71,7 +78,8 @@ class MeteoSwissMCPServer:
             log_level=args.log_level,  # forwarded to uvicorn, which configures its own loggers
         )
 
-        self.meteo = MeteoSwissPredictions(cache_all_locations=args.cache_all_locations)
+        forecast = LocalForecast(CACHE_DIR, cache_all_locations=args.cache_all_locations)
+        self.meteo = MeteoSwissPredictions(forecast)
         self._register_tools()
 
     def _register_tools(self) -> None:
