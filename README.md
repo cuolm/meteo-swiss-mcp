@@ -184,7 +184,7 @@ altitude, the time it applies to, and the model run the forecast came from.
 
 | Tool | Purpose | Example Call |
 |------|---------|--------------|
-| `current_date_and_time()` | Current date and time in Swiss local time | `current_date_and_time()` |
+| `current_date_and_time()` | Today's weekday and the Swiss time now, in the form the tools accept | `current_date_and_time()` |
 | `daily_forecast(location, date)` | Whole day: lowest and highest hourly temperature, median rainfall with its 10th and 90th percentile, daytime weather in words | `daily_forecast("Zurich", "2026-09-23")` |
 | `weather_description(location, when)` | The weather in words, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
 | `temperature(location, when)` | Air temperature (°C), mean of the hour up to that time, 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
@@ -199,7 +199,10 @@ altitude, the time it applies to, and the model run the forecast came from.
 | `freezing_level(location, when)` | Height of the 0 °C line (m above sea level) | `freezing_level("Zermatt", "2026-09-23T14:00")` |
 
 **Time**
-- Timestamps are ISO and read as Swiss local time, e.g. `"2026-09-23T14:00"`. An explicit offset is honoured.
+- Send times as Swiss clock time in ISO 8601 without an offset, e.g. `"2026-09-23T14:00"`. The server
+  applies summer or winter time for that date itself. An explicit offset is honoured.
+- All times in the answers are ISO 8601 Swiss local time with the UTC offset, e.g.
+  `2026-09-23T13:00+02:00`. The `+02:00` shows the difference to UTC: `+02:00` in summer, `+01:00` in winter.
 - MeteoSwiss stamps an hourly average or sum at the end of its hour, so `14:00` means 13:00 to 14:00,
   and a period from `start` to `end` covers exactly the hours in between. Cloud cover and the freezing
   level are values at that moment instead.

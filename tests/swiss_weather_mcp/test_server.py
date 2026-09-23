@@ -132,3 +132,15 @@ async def test_an_unexpected_failure_is_hidden_from_the_model(server_fixture):
     with pytest.raises(UnexpectedToolError) as raised:
         await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
     assert "internal detail" not in str(raised.value)
+
+
+@pytest.mark.asyncio
+async def test_the_current_time_can_be_sent_straight_back_to_a_tool(server_fixture):
+    # The model builds its next timestamp from this answer, so it must be in the form the tools read
+    result = await server_fixture.mcp.call_tool("current_date_and_time", {})
+    text = result.content[0].text
+    weekday, timestamp = text.removeprefix("Today is ").removesuffix(" (Swiss time)").split(", ")
+
+    moment = _parse_swiss_time(timestamp)
+    assert moment.tzinfo is SWISS_TZ, "written without an offset, so read as Swiss time"
+    assert moment.strftime("%A") == weekday

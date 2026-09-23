@@ -355,9 +355,10 @@ class LocalForecast:
         """
         run, assets = self.latest_run()
         if parameter not in assets:
-            raise ValueError(
-                f"Run {run} does not publish parameter '{parameter}', it has: {', '.join(sorted(assets))}"
-            )
+            # The run and the published codes help whoever finds out what MeteoSwiss changed, but mean
+            # nothing to the model reading the error, so they go to the log only
+            logger.warning(f"Run {run} does not publish '{parameter}', it has: {', '.join(sorted(assets))}")
+            raise ValueError(f"MeteoSwiss's newest forecast does not include '{parameter}'.")
 
         values = self._read_values(self._cached_file(parameter, point, run, assets[parameter]), point)
         if not values:

@@ -322,8 +322,13 @@ async def test_weather_description_turns_the_code_into_words(predictions_fixture
 
 @pytest.mark.asyncio
 async def test_a_time_outside_the_forecast_names_the_range_that_is_covered(predictions_fixture):
-    with pytest.raises(ValueError, match="outside the forecast"):
+    # Times are written as the answers write them, with the offset of their own date: 30 October is
+    # already winter time, the covered range is still summer time
+    with pytest.raises(ValueError) as raised:
         await predictions_fixture.temperature_for_location("Zurich", _swiss("2026-10-30T14:00"))
+
+    assert str(raised.value).startswith("2026-10-30T14:00+01:00 is outside the forecast")
+    assert "covers 2026-09-23T08:00+02:00 to 2026-09-23T15:00+02:00" in str(raised.value)
 
 
 @pytest.mark.asyncio
