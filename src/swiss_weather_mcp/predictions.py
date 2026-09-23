@@ -1,22 +1,19 @@
 import asyncio
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
-from zoneinfo import ZoneInfo
 
 from platformdirs import user_cache_path
 
-from .localforecast import PICTOGRAM_DESCRIPTIONS, LocalForecast, Point, Series
+from .localforecast import PICTOGRAM_DESCRIPTIONS, SWISS_TZ, LocalForecast, Point, Series
 
 logger = logging.getLogger(__name__)
 
 # Shared, OS-standard cache location (survives across working directories the server may be launched from).
 # Override with SWISS_WEATHER_MCP_CACHE_DIR, e.g. to isolate cache location in tests or Docker.
 CACHE_DIR = Path(os.environ.get("SWISS_WEATHER_MCP_CACHE_DIR", user_cache_path("swiss-weather-mcp")))
-
-SWISS_TZ = ZoneInfo("Europe/Zurich")
 
 # Compass points the wind direction in degrees is reported as, clockwise from north
 COMPASS_POINTS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -35,7 +32,7 @@ DAILY_PARAMETERS = (
 
 def _utc_hour(moment: datetime) -> datetime:
     """Round a moment down to the UTC hour the forecast rows are keyed by."""
-    return moment.astimezone(ZoneInfo("UTC")).replace(minute=0, second=0, microsecond=0)
+    return moment.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
 
 def _swiss(moment: datetime) -> str:
