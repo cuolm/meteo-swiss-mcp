@@ -11,14 +11,14 @@ from mcp.client.stdio import stdio_client
 
 try:
     from openai import AsyncOpenAI
-except ModuleNotFoundError as e:
+except ModuleNotFoundError as error:
     raise SystemExit(
         "The MCP client needs the OpenAI SDK, which ships in the optional 'client' extra.\n"
         "Install it with one of:\n"
         "    uv tool install 'swiss-weather-mcp[client]'   # installed as a tool\n"
         "    uv sync --extra client                        # from a source checkout\n"
         "    pip install 'swiss-weather-mcp[client]'"
-    ) from e
+    ) from error
 
 from . import LOG_LEVELS, setup_logging
 
@@ -46,8 +46,8 @@ class MCPClient:
         self.llm_client = AsyncOpenAI(base_url=base_url, api_key="not-needed")  # local servers ignore the key
         self.model = model
         self.messages: List[Dict[str, Any]] = []
-        self.stdio: Optional[Any] = None
-        self.write: Optional[Any] = None
+        self.read_stream: Optional[Any] = None
+        self.write_stream: Optional[Any] = None
 
     async def connect_to_server(self) -> None:
         # Launch the server module with the same interpreter running this client
@@ -60,9 +60,9 @@ class MCPClient:
         stdio_transport = await self.exit_stack.enter_async_context(
             stdio_client(server_params)
         )
-        self.stdio, self.write = stdio_transport
+        self.read_stream, self.write_stream = stdio_transport
         self.session = await self.exit_stack.enter_async_context(
-            ClientSession(self.stdio, self.write)
+            ClientSession(self.read_stream, self.write_stream)
         )
 
         # Initialize the connection
@@ -93,9 +93,9 @@ class MCPClient:
             arguments = json.loads(arguments_json or "{}")  # the model writes these as JSON text
             response = await self.session.call_tool(tool_name, arguments)
             return response.content[0].text
-        except Exception as e:
-            logger.error(f"Tool {tool_name} failed: {e}")
-            return f"Error calling tool {tool_name}: {str(e)}"
+        except Exception as error:
+            logger.error(f"Tool {tool_name} failed: {error}")
+            return f"Error calling tool {tool_name}: {error}"
 
     def _format_assistant_message(self, message: Any) -> Dict[str, Any]:
         """
@@ -111,14 +111,14 @@ class MCPClient:
         if message.tool_calls:
             formatted_message["tool_calls"] = [
                 {
-                    "id": call.id,  # each result has to reference the call it answers
+                    "id": tool_call.id,  # each result has to reference the call it answers
                     "type": "function",
                     "function": {
-                        "name": call.function.name,
-                        "arguments": call.function.arguments,
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments,
                     }
                 }
-                for call in message.tool_calls
+                for tool_call in message.tool_calls
             ]
 
         return formatted_message
@@ -140,11 +140,11 @@ class MCPClient:
 
             # Process each tool call
             for tool_call in message.tool_calls:
-                tool_call_response = await self.call_tool(tool_call.function.name, tool_call.function.arguments)
+                tool_result = await self.call_tool(tool_call.function.name, tool_call.function.arguments)
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
-                    "content": tool_call_response,
+                    "content": tool_result,
                 })
 
     async def cleanup(self):
