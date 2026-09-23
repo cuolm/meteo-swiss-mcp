@@ -305,6 +305,14 @@ async def test_cloud_cover_combines_the_overlapping_layers(predictions_fixture):
 
 
 @pytest.mark.asyncio
+async def test_cloud_cover_reads_the_nearest_snapshot(predictions_fixture):
+    # Cloud cover is a value at the moment of its stamp, not an average over the hour before, so
+    # 14:20 Swiss reads the 14:00 snapshot (12:00 UTC) rather than the one closing that hour
+    result = await predictions_fixture.total_cloud_cover_for_location("Zurich", _swiss("2026-09-23T14:20"))
+    assert result["value"] == 75.0
+
+
+@pytest.mark.asyncio
 async def test_weather_description_turns_the_code_into_words(predictions_fixture):
     result = await predictions_fixture.weather_description_for_location("Zurich", _swiss("2026-09-23T14:00"))
 
