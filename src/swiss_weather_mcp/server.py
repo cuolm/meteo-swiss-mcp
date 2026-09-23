@@ -49,11 +49,8 @@ def _parse_args() -> argparse.Namespace:
 
 def _parse_swiss_time(timestamp: str) -> datetime:
     """
-    Read an ISO timestamp as Swiss local time.
-
-    The forecast rows carry a real timestamp, so the tools take one too. A value without a
-    timezone is read as Europe/Zurich, which is how the caller asked the question, and an
-    explicit offset is honoured as given.
+    Read an ISO 8601 timestamp or date. Without an offset it is read as Swiss local time, and an
+    explicit offset is kept.
 
     Parameters:
         timestamp (str): ISO timestamp, e.g. "2026-09-23T14:00", or a date, e.g. "2026-09-23".
@@ -72,18 +69,18 @@ def _parse_swiss_time(timestamp: str) -> datetime:
 
 def _handle_tool_call(tool: Callable[..., Awaitable[Dict[str, Any]]]) -> Callable[..., Awaitable[Dict[str, Any]]]:
     """
-    Log each call of a tool, and report the failures a caller can act on to the model.
+    Log each call of a tool, and turn the failures the model can act on into a ToolError.
 
-    mcp shows the model the message of a ToolError, and hides the text of any other exception
-    while it logs the traceback. A place or time the forecast cannot answer, and MeteoSwiss being
-    out of reach, are failures the model can act on, so they become a ToolError. They are logged
-    as one warning line, since they are not faults in the server. Every other failure stays a crash.
+    A ValueError (a place or time the forecast cannot answer) and a request error (MeteoSwiss out
+    of reach) become a ToolError, whose message mcp shows to the model, and are logged as one
+    warning line. Every other failure stays a crash, which mcp hides from the model and logs with
+    its traceback.
 
     Parameters:
         tool (Callable): The tool function, called with its arguments as keywords.
 
     Returns:
-        Callable: The same tool, with its calls logged and its failures reported as described above.
+        Callable: The same tool, with its calls logged and its failures handled as above.
     """
     @functools.wraps(tool)
     async def run_tool(**arguments: Any) -> Dict[str, Any]:

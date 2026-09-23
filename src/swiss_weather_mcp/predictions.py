@@ -32,11 +32,10 @@ DAILY_PARAMETERS = (
 
 def _find_closing_stamp(moment: datetime) -> datetime:
     """
-    Return the stamp of the forecast row whose hour contains a moment, for averages and sums.
+    Return the stamp of the row whose hour contains a moment, for averages and sums.
 
-    MeteoSwiss stamps an hourly average or sum at the end of the hour it covers, so the row stamped
-    14:00 is the hour from 13:00 to 14:00. A moment on the full hour therefore reads the row stamped
-    at that hour, and 14:30 reads the row stamped 15:00.
+    A row covers the hour before its stamp, so 14:00 reads the row stamped 14:00, and 14:30 the
+    row stamped 15:00.
     """
     moment = moment.astimezone(timezone.utc)
     full_hour = moment.replace(minute=0, second=0, microsecond=0)
@@ -46,33 +45,18 @@ def _find_closing_stamp(moment: datetime) -> datetime:
 
 
 def _find_nearest_stamp(moment: datetime) -> datetime:
-    """
-    Return the stamp closest to a moment, for values taken at the moment of their stamp.
-
-    A snapshot such as cloud cover belongs to its stamp alone, so 14:20 is best answered by the
-    14:00 value, 20 minutes away, rather than by the 15:00 one. Half past rounds up.
-    """
+    """Return the full hour closest to a moment, for snapshot values. Half past rounds up."""
     moment = moment.astimezone(timezone.utc) + timedelta(minutes=30)
     return moment.replace(minute=0, second=0, microsecond=0)
 
 
 def _format_swiss_time(moment: datetime) -> str:
-    """
-    Render a moment as ISO 8601 Swiss local time with its UTC offset, such as 2026-09-23T14:00+02:00.
-
-    Every time the model reads, in an answer or in an error, uses this one form. The offset makes it
-    exact, and it changes with the date, +01:00 in winter and +02:00 in summer.
-    """
+    """Format a moment as ISO 8601 Swiss local time with its UTC offset, such as 2026-09-23T14:00+02:00."""
     return moment.astimezone(SWISS_TZ).isoformat(timespec="minutes")
 
 
 def _describe_covered_range(series: Series, parameter: str) -> str:
-    """
-    Say which times a series actually covers.
-
-    The published window starts at a different hour for each parameter, so this is read off the
-    series rather than assumed, which keeps the message right for every tool.
-    """
+    """Say which times a series covers, for an error message."""
     return (
         f"'{parameter}' covers {_format_swiss_time(min(series.values))} to "
         f"{_format_swiss_time(max(series.values))}."
@@ -93,28 +77,20 @@ def _to_compass_point(degrees: float) -> str:
 
 class SwissWeatherPredictions:
     def __init__(self, forecast: LocalForecast):
-        """
-        Answer weather questions from a forecast data source.
-
-        The source is passed in rather than built here, so the caller decides where its cache
-        lives and how much it keeps, and tests can hand in one of their own.
-        """
         self.forecast = forecast
 
     async def _find_point(self, location: str) -> Point:
-        """Resolve a location name or postal code, off the event loop since it may download the table."""
+        """Find the forecast point for a location in a worker thread, so a download does not block other requests."""
         return await asyncio.to_thread(self.forecast.find_point, location)
 
     async def _read_series(self, parameter: str, point: Point) -> Series:
-        """Read one parameter for one point, off the event loop since it may download a large file."""
+        """Read one parameter for one point in a worker thread, so a download does not block other requests."""
         return await asyncio.to_thread(self.forecast.read_series, parameter, point)
 
     def _read_value_at(self, series: Series, when: datetime, point: Point, parameter: str) -> float:
         """
-        Pick the forecast row for the requested time.
-
-        An average or sum is read from the row whose hour contains the time, a snapshot from the
-        row stamped closest to it.
+        Return the value at a time: an average or sum from the row whose hour contains the time,
+        a snapshot from the row stamped closest to it.
         """
         if parameter in parameters.SNAPSHOTS:
             stamp = _find_nearest_stamp(when)
@@ -128,18 +104,14 @@ class SwissWeatherPredictions:
         return series.values[stamp]
 
     def _sum_between(self, series: Series, start: datetime, end: datetime, point: Point, parameter: str) -> float:
-        """
-        Add up the hourly values of the period from start to end.
-
-        Each row covers the hour before its stamp, so the rows stamped after start, up to and
-        including end, are exactly the hours of the period.
-        """
+        """Add up the hourly values from start to end."""
         first_stamp = _find_closing_stamp(start)
         last_stamp = _find_closing_stamp(end)
 
         total = 0.0
         hours_counted = 0
         for stamp, value in series.values.items():
+            # A row covers the hour before its stamp, so the row stamped at start is not in the period
             if first_stamp < stamp <= last_stamp:
                 total += value
                 hours_counted += 1
@@ -152,12 +124,7 @@ class SwissWeatherPredictions:
         return total
 
     def _build_answer(self, value: Any, unit: str, point: Point, run_time: datetime, **fields: Any) -> Dict[str, Any]:
-        """
-        Build the answer a tool returns.
-
-        The resolved point travels with the number because a name maps to many points, and in
-        Switzerland the altitude decides the weather as much as the place does.
-        """
+        """Build a tool answer: the value and unit, the resolved point, extra fields and the model run."""
         answer = {"value": value, "unit": unit, "location": point.label, "altitude_m": point.altitude_m}
         answer.update(fields)
         answer["model_run"] = _format_swiss_time(run_time)
@@ -165,7 +132,7 @@ class SwissWeatherPredictions:
 
     async def _build_hourly_answer(self, location: str, parameter: str, when: datetime, unit: str) -> Dict[str, Any]:
         """
-        Read one parameter at one hour, the shape every point-in-time tool shares.
+        Read one parameter for a location at one time.
 
         Parameters:
             location (str): Location name or postal code.
