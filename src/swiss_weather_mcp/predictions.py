@@ -3,7 +3,8 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
 
-from .localforecast import PICTOGRAM_DESCRIPTIONS, SWISS_TZ, LocalForecast, Point, Series
+from . import parameters
+from .localforecast import SWISS_TZ, LocalForecast, Point, Series
 
 logger = logging.getLogger(__name__)
 
@@ -11,21 +12,21 @@ logger = logging.getLogger(__name__)
 COMPASS_POINTS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
                   "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
 
-# The three cloud layers MeteoSwiss publishes separately, lowest first
+# The field each cloud layer fills in the answer, lowest first
 CLOUD_LAYERS = (
-    ("low", "nprolohs"),
-    ("medium", "npromths"),
-    ("high", "nprohihs"),
+    ("low", parameters.CLOUD_COVER_LOW),
+    ("medium", parameters.CLOUD_COVER_MEDIUM),
+    ("high", parameters.CLOUD_COVER_HIGH),
 )
 
-# Which daily parameter answers which field of the daily forecast
+# The field each daily parameter fills in the daily forecast
 DAILY_PARAMETERS = (
-    ("temperature_min_c", "tre200pn"),
-    ("temperature_max_c", "tre200px"),
-    ("rainfall_mm", "rka150p0"),
-    ("rainfall_min_mm", "rreq10p0"),
-    ("rainfall_max_mm", "rreq90p0"),
-    ("weather", "jp2000d0"),
+    ("temperature_min_c", parameters.TEMPERATURE_DAY_MIN),
+    ("temperature_max_c", parameters.TEMPERATURE_DAY_MAX),
+    ("rainfall_mm", parameters.PRECIPITATION_DAY),
+    ("rainfall_min_mm", parameters.PRECIPITATION_DAY_LOW),
+    ("rainfall_max_mm", parameters.PRECIPITATION_DAY_HIGH),
+    ("weather", parameters.WEATHER_PICTOGRAM_DAY),
 )
 
 
@@ -69,7 +70,7 @@ def _covered_range(series: Series, parameter: str) -> str:
 
 def _describe(code: int) -> str:
     """Turn a MeteoSwiss pictogram code into the sentence it stands for."""
-    return PICTOGRAM_DESCRIPTIONS.get(code, f"unknown weather code {code}")
+    return parameters.PICTOGRAM_DESCRIPTIONS.get(code, f"unknown weather code {code}")
 
 
 def _compass_point(degrees: float) -> str:
@@ -162,32 +163,32 @@ class MeteoSwissPredictions:
         return self._result(value, unit, point, series.run, valid_at=_valid_at(when))
 
     async def temp_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._value_for_location(location, "tre200h0", when, "°C")
+        return await self._value_for_location(location, parameters.TEMPERATURE, when, "°C")
 
     async def wind_speed_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._value_for_location(location, "fu3010h0", when, "km/h")
+        return await self._value_for_location(location, parameters.WIND_SPEED, when, "km/h")
 
     async def wind_gusts_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._value_for_location(location, "fu3010h1", when, "km/h")
+        return await self._value_for_location(location, parameters.WIND_GUSTS, when, "km/h")
 
     async def freezing_level_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._value_for_location(location, "zprfr0hs", when, "m above sea level")
+        return await self._value_for_location(location, parameters.FREEZING_LEVEL, when, "m above sea level")
 
     async def precipitation_rate_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._value_for_location(location, "rre150h0", when, "mm/h")
+        return await self._value_for_location(location, parameters.PRECIPITATION, when, "mm/h")
 
     async def precipitation_probability_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._value_for_location(location, "rp0003i0", when, "%")
+        return await self._value_for_location(location, parameters.PRECIPITATION_PROBABILITY, when, "%")
 
     async def wind_direction_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        result = await self._value_for_location(location, "dkl010h0", when, "degrees")
+        result = await self._value_for_location(location, parameters.WIND_DIRECTION, when, "degrees")
         result["compass_point"] = _compass_point(result["value"])
         return result
 
     async def weather_description_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
         point = await self._resolve(location)
-        series = await self._series("jww003i0", point)
-        code = int(self._value_at(series, when, point, "jww003i0"))
+        series = await self._series(parameters.WEATHER_PICTOGRAM, point)
+        code = int(self._value_at(series, when, point, parameters.WEATHER_PICTOGRAM))
         return self._result(
             _describe(code), "description", point, series.run,
             valid_at=_valid_at(when), pictogram_code=code,
@@ -195,15 +196,15 @@ class MeteoSwissPredictions:
 
     async def total_rainfall_for_location(self, location: str, start: datetime, end: datetime) -> Dict[str, Any]:
         point = await self._resolve(location)
-        series = await self._series("rre150h0", point)
-        total = self._sum_between(series, start, end, point, "rre150h0")
+        series = await self._series(parameters.PRECIPITATION, point)
+        total = self._sum_between(series, start, end, point, parameters.PRECIPITATION)
         return self._result(round(total, 1), "mm", point, series.run,
                             **{"from": _valid_at(start), "to": _valid_at(end)})
 
     async def sunshine_hours_for_location(self, location: str, start: datetime, end: datetime) -> Dict[str, Any]:
         point = await self._resolve(location)
-        series = await self._series("sre000h0", point)
-        minutes = self._sum_between(series, start, end, point, "sre000h0")
+        series = await self._series(parameters.SUNSHINE, point)
+        minutes = self._sum_between(series, start, end, point, parameters.SUNSHINE)
         return self._result(round(minutes / 60, 1), "h", point, series.run,
                             **{"from": _valid_at(start), "to": _valid_at(end)})
 
