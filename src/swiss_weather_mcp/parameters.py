@@ -40,7 +40,7 @@ WEATHER_PICTOGRAM_DAY = "jp2000d0"      # MeteoSwiss pictogram number, daily val
 
 # MeteoSwiss pictogram codes, published by jp2000d0 (daily) and jww003i0 (3 hourly). Codes above 100
 # are the night variant of the same weather. Taken from the MeteoSwiss icon reference sheet, with its
-# "cloudly" spelling corrected because these strings are shown to the user.
+# "cloudly" and "intermittant" spellings corrected because these strings are shown to the user.
 PICTOGRAM_DESCRIPTIONS = {
     1: "sunny",
     2: "mostly sunny, some clouds",
@@ -101,7 +101,7 @@ PICTOGRAM_DESCRIPTIONS = {
     115: "very cloudy, light rain and snow showers",
     116: "very cloudy, light snowfall",
     117: "very cloudy, intermittent rain",
-    118: "very cloudy, intermittant mixed rain and snowfall",
+    118: "very cloudy, intermittent mixed rain and snowfall",
     119: "very cloudy, intermittent snowfall",
     120: "very cloudy, constant rain",
     121: "very cloudy, frequent rain and snowfall",
