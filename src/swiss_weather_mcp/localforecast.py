@@ -17,7 +17,7 @@ STAC_BASE_URL = "https://data.geo.admin.ch/api/stac/v1"
 POINT_TABLE_URL = f"https://data.geo.admin.ch/{COLLECTION_ID}/ogd-local-forecasting_meta_point.csv"
 
 # The item id is built from the Swiss calendar day, the same anchor the published window uses
-LOCAL_TZ = ZoneInfo("Europe/Zurich")
+SWISS_TZ = ZoneInfo("Europe/Zurich")
 
 # The point table only changes when MeteoSwiss adds a location, so it is refetched rarely
 POINT_TABLE_MAX_AGE = timedelta(days=7)
@@ -283,7 +283,7 @@ class LocalForecast:
         if self.run_lookup and datetime.now(timezone.utc) - self.run_lookup[0] < RUN_LOOKUP_MAX_AGE:
             return self.run_lookup[1], self.run_lookup[2]
 
-        today = datetime.now(LOCAL_TZ)
+        today = datetime.now(SWISS_TZ)
         for day in (today, today - timedelta(days=1)):
             by_run = self._assets_by_run(day)
             if by_run:

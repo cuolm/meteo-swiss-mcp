@@ -2,16 +2,14 @@ import argparse
 import logging
 import sys
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from mcp.server.fastmcp import FastMCP
 
 from . import LOG_LEVELS, setup_logging
+from .localforecast import SWISS_TZ
 from .predictions import MeteoSwissPredictions
 
 logger = logging.getLogger(__name__)
-
-SWISS_TZ = ZoneInfo("Europe/Zurich")
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MCP Server")
