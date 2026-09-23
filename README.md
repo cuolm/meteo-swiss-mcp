@@ -185,13 +185,13 @@ altitude, the time it applies to, and the model run the forecast came from.
 | Tool | Purpose | Example Call |
 |------|---------|--------------|
 | `current_date_and_time()` | Current date and time in Swiss local time | `current_date_and_time()` |
-| `daily_forecast(location, date)` | Whole day: min/max temperature, median rainfall with its 10th and 90th percentile, worded summary | `daily_forecast("Zurich", "2026-09-23")` |
+| `daily_forecast(location, date)` | Whole day: lowest and highest hourly temperature, median rainfall with its 10th and 90th percentile, daytime weather in words | `daily_forecast("Zurich", "2026-09-23")` |
 | `weather_description(location, when)` | The weather in words, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
 | `temperature(location, when)` | Air temperature (°C), mean of the hour up to that time, 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
-| `total_rainfall(location, start, end)` | Rainfall (mm) summed over a period | `total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
+| `total_rainfall(location, start, end)` | Most likely rainfall (mm) of each hour, summed over a period | `total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
 | `sunshine_hours(location, start, end)` | Sunshine (h) summed over a period | `sunshine_hours("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
 | `precipitation_probability(location, when)` | Chance of rain (%) over the 3 hours up to that time | `precipitation_probability("Zurich", "2026-09-23T14:00")` |
-| `precipitation_rate(location, when)` | Rainfall (mm) in the hour up to that time | `precipitation_rate("Zurich", "2026-09-23T14:00")` |
+| `precipitation_rate(location, when)` | Most likely rainfall (mm) in the hour up to that time | `precipitation_rate("Zurich", "2026-09-23T14:00")` |
 | `wind_speed(location, when)` | Wind speed (km/h), mean of the hour up to that time | `wind_speed("Zurich", "2026-09-23T14:00")` |
 | `wind_gusts(location, when)` | Strongest one-second gust (km/h) in the hour up to that time | `wind_gusts("Säntis", "2026-09-23T14:00")` |
 | `wind_direction(location, when)` | Direction the wind blows from, in degrees and as a compass point | `wind_direction("Zurich", "2026-09-23T14:00")` |
@@ -216,6 +216,11 @@ altitude, the time it applies to, and the model run the forecast came from.
 > **Note:** `daily_forecast` is by far the cheapest tool, roughly 7 MB against about 31 MB per hourly
 > parameter, so prefer it when the question is about a day rather than an hour. `total_cloud_cover`
 > is the most expensive because it reads three files.
+
+> **Note:** Every value is the median of the forecast, the most likely outcome, unless it is named as a
+> percentile. Medians do not add up: when showers are possible but unlikely in any single hour, every
+> hourly amount is 0, while the day as a whole still has a median of several millimetres. Ask
+> `daily_forecast` for the rain of a day, not `total_rainfall`.
 
 ## Example Usage with LMStudio
 

@@ -140,7 +140,9 @@ class SwissWeatherMCPServer:
             Get the whole-day summary for a location: the cheapest way to answer "how is the weather".
 
             Prefer this over several hourly tools when the question is about a day rather than an
-            hour. The values cover a Swiss calendar day, 00:00 to 24:00 local time.
+            hour, and always for the rain of a whole day. The values cover a Swiss calendar day,
+            00:00 to 24:00 local time. The minimum and maximum are the lowest and highest hourly
+            mean temperature of that day, and the weather words describe the daytime.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
@@ -212,7 +214,10 @@ class SwissWeatherMCPServer:
             """
             Get the total rainfall for a location over a period.
 
-            The hourly amounts are added up over exactly the hours from start to end.
+            The hourly amounts are added up over exactly the hours from start to end. Each is the
+            most likely amount for its hour, so when showers are possible but unlikely in any single
+            hour, the sum stays 0 even if the day as a whole is expected to be wet. For the rain of a
+            whole day use daily_forecast, and for whether it rains at all precipitation_probability.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
@@ -286,8 +291,9 @@ class SwissWeatherMCPServer:
             """
             Get how much rain falls at a location during one hour.
 
-            This is the amount in the hour up to that time, so 14:00 means 13:00 to 14:00. For a
-            longer period use total_rainfall.
+            This is the most likely amount in the hour up to that time, so 14:00 means 13:00 to
+            14:00. For whether it rains at all use precipitation_probability, and for a whole day
+            daily_forecast.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
@@ -406,8 +412,8 @@ class SwissWeatherMCPServer:
             """
             Get the height of the 0 degree line at a location at a specific time.
 
-            Above this altitude precipitation falls as snow, so it answers questions about snow in
-            the mountains, such as how high a ski area has to be.
+            This is the height where the air is at 0 degrees. Snow usually reaches somewhat below it,
+            so it answers questions about snow in the mountains, such as how high a ski area has to be.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").

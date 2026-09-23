@@ -7,6 +7,9 @@ is the MeteoSwiss description of that parameter, from ogd-local-forecasting_meta
 All times are UTC. An hourly average or sum is stamped at the end of the hour it covers, and a
 3 hourly one at the end of its 3 hours. The SNAPSHOTS below are values at the moment of their stamp
 instead. Daily values are stamped at the start of their day.
+
+Unless a parameter is named as a quantile, its value is the median of the forecast, the most likely
+outcome. Medians do not add up: hourly rain medians can all be 0 on a day whose median total is not.
 """
 
 # ── hourly ───────────────────────────────────────────────────────────────────
