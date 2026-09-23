@@ -56,13 +56,13 @@ def _nearest_stamp(moment: datetime) -> datetime:
     return moment.replace(minute=0, second=0, microsecond=0)
 
 
-def _swiss(moment: datetime) -> str:
-    """Render a moment as Swiss local time, for messages a person reads."""
-    return f"{moment.astimezone(SWISS_TZ):%Y-%m-%d %H:%M}"
-
-
 def _swiss_timestamp(moment: datetime) -> str:
-    """Render a moment as a Swiss local ISO timestamp with its offset, the one form every time in an answer uses."""
+    """
+    Render a moment as ISO 8601 Swiss local time with its UTC offset, such as 2026-09-23T14:00+02:00.
+
+    Every time the model reads, in an answer or in an error, uses this one form. The offset makes it
+    exact, and it changes with the date, +01:00 in winter and +02:00 in summer.
+    """
     return moment.astimezone(SWISS_TZ).isoformat(timespec="minutes")
 
 
@@ -74,8 +74,8 @@ def _covered_range(series: Series, parameter: str) -> str:
     series rather than assumed, which keeps the message right for every tool.
     """
     return (
-        f"'{parameter}' covers {_swiss(min(series.values))} to "
-        f"{_swiss(max(series.values))} Swiss time."
+        f"'{parameter}' covers {_swiss_timestamp(min(series.values))} to "
+        f"{_swiss_timestamp(max(series.values))}."
     )
 
 
@@ -122,7 +122,7 @@ class SwissWeatherPredictions:
             stamp = _closing_stamp(when)
         if stamp not in series.values:
             raise ValueError(
-                f"{_swiss(when)} is outside the forecast for {point.label()}. "
+                f"{_swiss_timestamp(when)} is outside the forecast for {point.label()}. "
                 f"{_covered_range(series, parameter)}"
             )
         return series.values[stamp]
@@ -146,7 +146,7 @@ class SwissWeatherPredictions:
 
         if not counted:
             raise ValueError(
-                f"{_swiss(start)} to {_swiss(end)} is outside the forecast for {point.label()}. "
+                f"{_swiss_timestamp(start)} to {_swiss_timestamp(end)} is outside the forecast for {point.label()}. "
                 f"{_covered_range(series, parameter)}"
             )
         return total
