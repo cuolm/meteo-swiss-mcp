@@ -41,15 +41,6 @@ def setup_logging(log_level: str = "INFO") -> None:
                 "level": log_level,
                 "propagate": False,
             },
-            "earthkit.data": {  # cache bookkeeping on every download
-                "level": "ERROR",
-            },
-            "meteodatalab": {  # one line per retrieved GRIB request
-                "level": "WARNING",
-            },
-            "multiurl": {  # download progress
-                "level": "WARNING",
-            },
             "httpx": {  # silence httpx HTTP request logs
                 "level": "WARNING",
             },
