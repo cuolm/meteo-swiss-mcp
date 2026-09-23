@@ -1,10 +1,13 @@
 import argparse
+import functools
 import logging
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict
 
+import requests
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from platformdirs import user_cache_path
@@ -67,6 +70,38 @@ def _parse_swiss_time(value: str) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=SWISS_TZ)
 
 
+def _handle_tool_call(tool: Callable[..., Awaitable[Dict[str, Any]]]) -> Callable[..., Awaitable[Dict[str, Any]]]:
+    """
+    Log each call of a tool, and report the failures a caller can act on to the model.
+
+    mcp shows the model the message of a ToolError, and hides the text of any other exception
+    while it logs the traceback. A place or time the forecast cannot answer, and MeteoSwiss being
+    out of reach, are failures the model can act on, so they become a ToolError. They are logged
+    as one warning line, since they are not faults in the server. Every other failure stays a crash.
+
+    Parameters:
+        tool (Callable): The tool function, called with its arguments as keywords.
+
+    Returns:
+        Callable: The same tool, with its calls logged and its failures reported as described above.
+    """
+    @functools.wraps(tool)
+    async def run_tool(**arguments: Any) -> Dict[str, Any]:
+        try:
+            result = await tool(**arguments)
+        except ValueError as error:
+            logger.warning(f"{tool.__name__}: {error}")
+            raise ToolError(str(error)) from error
+        except requests.RequestException as error:
+            logger.warning(f"{tool.__name__}: could not reach MeteoSwiss: {error}")
+            raise ToolError(f"Could not reach MeteoSwiss, try again later: {error}") from error
+
+        logger.info(f"{tool.__name__}: {arguments} -> {result}")
+        return result
+
+    return run_tool
+
+
 class MeteoSwissMCPServer:
     def __init__(self, args: argparse.Namespace) -> None:
         self.host = args.host
@@ -99,6 +134,7 @@ class MeteoSwissMCPServer:
             return f"Today is {formatted_date_time}"
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def daily_forecast(location: str, date: str) -> dict:
             """
             Get the whole-day summary for a location: the cheapest way to answer "how is the weather".
@@ -121,15 +157,10 @@ class MeteoSwissMCPServer:
                 daily_forecast("Zurich", "2026-09-23")
                 daily_forecast("8001", "2026-09-25")
             """
-            try:
-                result = await self.meteo.daily_forecast_for_location(location, _parse_swiss_time(date))
-                logger.info(f"daily_forecast: location={location}, date={date}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get the daily forecast for location '{location}': {error}")
-                raise ToolError(f"Failed to get the daily forecast for location '{location}': {error}") from error
+            return await self.meteo.daily_forecast_for_location(location, _parse_swiss_time(date))
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def weather_description(location: str, when: str) -> dict:
             """
             Get the weather in words for a location at a specific time.
@@ -149,15 +180,10 @@ class MeteoSwissMCPServer:
                 weather_description("Zurich", "2026-09-23T14:00")
                 weather_description("Davos", "2026-09-24T08:00")
             """
-            try:
-                result = await self.meteo.weather_description_for_location(location, _parse_swiss_time(when))
-                logger.info(f"weather_description: location={location}, when={when}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get the weather description for location '{location}': {error}")
-                raise ToolError(f"Failed to get the weather description for location '{location}': {error}") from error
+            return await self.meteo.weather_description_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def temperature(location: str, when: str) -> dict:
             """
             Get the air temperature for a location at a specific time.
@@ -177,15 +203,10 @@ class MeteoSwissMCPServer:
                 temperature("Zurich", "2026-09-23T14:00")
                 temperature("Zermatt", "2026-09-25T07:00")
             """
-            try:
-                result = await self.meteo.temp_for_location(location, _parse_swiss_time(when))
-                logger.info(f"temperature: location={location}, when={when}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get temperature for location '{location}': {error}")
-                raise ToolError(f"Failed to get temperature for location '{location}': {error}") from error
+            return await self.meteo.temp_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def total_rainfall(location: str, start: str, end: str) -> dict:
             """
             Get the total rainfall for a location over a period.
@@ -205,17 +226,12 @@ class MeteoSwissMCPServer:
                 total_rainfall("Zurich", "2026-09-23T00:00", "2026-09-24T00:00")   # the whole day
                 total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T12:00")   # the morning
             """
-            try:
-                result = await self.meteo.total_rainfall_for_location(
-                    location, _parse_swiss_time(start), _parse_swiss_time(end)
-                )
-                logger.info(f"total_rainfall: location={location}, start={start}, end={end}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get total rainfall for location '{location}': {error}")
-                raise ToolError(f"Failed to get total rainfall for location '{location}': {error}") from error
+            return await self.meteo.total_rainfall_for_location(
+                location, _parse_swiss_time(start), _parse_swiss_time(end)
+            )
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def sunshine_hours(location: str, start: str, end: str) -> dict:
             """
             Get the sunshine hours for a location over a period.
@@ -236,17 +252,12 @@ class MeteoSwissMCPServer:
                 sunshine_hours("Zurich", "2026-09-23T00:00", "2026-09-24T00:00")   # the whole day
                 sunshine_hours("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")   # the afternoon
             """
-            try:
-                result = await self.meteo.sunshine_hours_for_location(
-                    location, _parse_swiss_time(start), _parse_swiss_time(end)
-                )
-                logger.info(f"sunshine_hours: location={location}, start={start}, end={end}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get sunshine hours for location '{location}': {error}")
-                raise ToolError(f"Failed to get sunshine hours for location '{location}': {error}") from error
+            return await self.meteo.sunshine_hours_for_location(
+                location, _parse_swiss_time(start), _parse_swiss_time(end)
+            )
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def precipitation_probability(location: str, when: str) -> dict:
             """
             Get how likely rain is for a location at a specific time.
@@ -266,15 +277,10 @@ class MeteoSwissMCPServer:
                 precipitation_probability("Zurich", "2026-09-23T14:00")
                 precipitation_probability("Lugano", "2026-09-24T18:00")
             """
-            try:
-                result = await self.meteo.precipitation_probability_for_location(location, _parse_swiss_time(when))
-                logger.info(f"precipitation_probability: location={location}, when={when}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get precipitation probability for location '{location}': {error}")
-                raise ToolError(f"Failed to get precipitation probability for location '{location}': {error}") from error
+            return await self.meteo.precipitation_probability_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def precipitation_rate(location: str, when: str) -> dict:
             """
             Get how much rain falls at a location during one hour.
@@ -294,15 +300,10 @@ class MeteoSwissMCPServer:
                 precipitation_rate("Zurich", "2026-09-23T14:00")
                 precipitation_rate("Lugano", "2026-09-24T18:00")
             """
-            try:
-                result = await self.meteo.precipitation_rate_for_location(location, _parse_swiss_time(when))
-                logger.info(f"precipitation_rate: location={location}, when={when}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get precipitation rate for location '{location}': {error}")
-                raise ToolError(f"Failed to get precipitation rate for location '{location}': {error}") from error
+            return await self.meteo.precipitation_rate_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def wind_speed(location: str, when: str) -> dict:
             """
             Get the wind speed for a location at a specific time.
@@ -322,15 +323,10 @@ class MeteoSwissMCPServer:
                 wind_speed("Zurich", "2026-09-23T14:00")
                 wind_speed("Säntis", "2026-09-24T12:00")
             """
-            try:
-                result = await self.meteo.wind_speed_for_location(location, _parse_swiss_time(when))
-                logger.info(f"wind_speed: location={location}, when={when}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get wind speed for location '{location}': {error}")
-                raise ToolError(f"Failed to get wind speed for location '{location}': {error}") from error
+            return await self.meteo.wind_speed_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def wind_gusts(location: str, when: str) -> dict:
             """
             Get the strongest wind gust expected at a location during one hour.
@@ -350,15 +346,10 @@ class MeteoSwissMCPServer:
                 wind_gusts("Zurich", "2026-09-23T14:00")
                 wind_gusts("Jungfraujoch", "2026-09-24T12:00")
             """
-            try:
-                result = await self.meteo.wind_gusts_for_location(location, _parse_swiss_time(when))
-                logger.info(f"wind_gusts: location={location}, when={when}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get wind gusts for location '{location}': {error}")
-                raise ToolError(f"Failed to get wind gusts for location '{location}': {error}") from error
+            return await self.meteo.wind_gusts_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def wind_direction(location: str, when: str) -> dict:
             """
             Get the direction the wind blows from at a location at a specific time.
@@ -378,15 +369,10 @@ class MeteoSwissMCPServer:
                 wind_direction("Zurich", "2026-09-23T14:00")
                 wind_direction("Altdorf", "2026-09-24T12:00")
             """
-            try:
-                result = await self.meteo.wind_direction_for_location(location, _parse_swiss_time(when))
-                logger.info(f"wind_direction: location={location}, when={when}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get wind direction for location '{location}': {error}")
-                raise ToolError(f"Failed to get wind direction for location '{location}': {error}") from error
+            return await self.meteo.wind_direction_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def total_cloud_cover(location: str, when: str) -> dict:
             """
             Get how cloudy it is at a location at a specific time.
@@ -411,15 +397,10 @@ class MeteoSwissMCPServer:
                 total_cloud_cover("Zurich", "2026-09-23T14:00")
                 total_cloud_cover("Locarno", "2026-09-24T09:00")
             """
-            try:
-                result = await self.meteo.total_cloud_cover_for_location(location, _parse_swiss_time(when))
-                logger.info(f"total_cloud_cover: location={location}, when={when}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get total cloud cover for location '{location}': {error}")
-                raise ToolError(f"Failed to get total cloud cover for location '{location}': {error}") from error
+            return await self.meteo.total_cloud_cover_for_location(location, _parse_swiss_time(when))
 
         @self.mcp.tool()
+        @_handle_tool_call
         async def freezing_level(location: str, when: str) -> dict:
             """
             Get the height of the 0 degree line at a location at a specific time.
@@ -439,13 +420,7 @@ class MeteoSwissMCPServer:
                 freezing_level("Zermatt", "2026-09-23T14:00")
                 freezing_level("Davos", "2026-09-25T06:00")
             """
-            try:
-                result = await self.meteo.freezing_level_for_location(location, _parse_swiss_time(when))
-                logger.info(f"freezing_level: location={location}, when={when}, result={result}")
-                return result
-            except Exception as error:
-                logger.exception(f"Failed to get the freezing level for location '{location}': {error}")
-                raise ToolError(f"Failed to get the freezing level for location '{location}': {error}") from error
+            return await self.meteo.freezing_level_for_location(location, _parse_swiss_time(when))
 
     def run(self):
         if self.transport == "stdio":

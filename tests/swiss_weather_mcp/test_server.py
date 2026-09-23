@@ -1,11 +1,47 @@
+import argparse
+import json
+import logging
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
+import requests
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 
-from swiss_weather_mcp.server import _parse_swiss_time
+from swiss_weather_mcp.server import MeteoSwissMCPServer, _parse_swiss_time
 
 SWISS_TZ = ZoneInfo("Europe/Zurich")
+
+# Every tool the server offers, with its arguments in order
+EXPECTED_TOOLS = {
+    "current_date_and_time": [],
+    "daily_forecast": ["location", "date"],
+    "weather_description": ["location", "when"],
+    "temperature": ["location", "when"],
+    "total_rainfall": ["location", "start", "end"],
+    "sunshine_hours": ["location", "start", "end"],
+    "precipitation_probability": ["location", "when"],
+    "precipitation_rate": ["location", "when"],
+    "wind_speed": ["location", "when"],
+    "wind_gusts": ["location", "when"],
+    "wind_direction": ["location", "when"],
+    "total_cloud_cover": ["location", "when"],
+    "freezing_level": ["location", "when"],
+}
+
+TEMPERATURE_CALL = {"location": "Zurich", "when": "2026-09-24T14:00"}
+
+
+@pytest.fixture
+def server_fixture(mocker, tmp_path):
+    """Return the MCP server with its weather layer replaced by a mock, so no tool reaches the network."""
+    mocker.patch("swiss_weather_mcp.server.CACHE_DIR", tmp_path)
+    args = argparse.Namespace(
+        host="localhost", port=8050, transport="stdio", cache_all_locations=False, log_level="INFO"
+    )
+    server = MeteoSwissMCPServer(args)
+    server.meteo = mocker.AsyncMock()
+    return server
 
 
 def test_a_timestamp_without_a_zone_is_read_as_swiss_local_time():
@@ -42,3 +78,57 @@ def test_a_space_between_date_and_time_is_accepted():
 def test_an_unreadable_timestamp_says_what_a_good_one_looks_like():
     with pytest.raises(ValueError, match="2026-09-23T14:00"):
         _parse_swiss_time("tomorrow afternoon")
+
+
+# ── tools ────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_the_server_offers_every_tool_with_its_arguments(server_fixture):
+    offered = {}
+    for tool in await server_fixture.mcp.list_tools():
+        offered[tool.name] = list(tool.input_schema.get("properties", {}))
+    assert offered == EXPECTED_TOOLS
+
+
+@pytest.mark.asyncio
+async def test_a_tool_returns_the_forecast_it_was_given(server_fixture):
+    answer = {"value": 19.1, "unit": "°C", "location": "Zürich 8001 (409 m)"}
+    server_fixture.meteo.temp_for_location.return_value = answer
+
+    result = await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
+    assert json.loads(result.content[0].text) == answer
+
+
+@pytest.mark.asyncio
+async def test_a_failure_the_caller_can_fix_reaches_the_model_without_a_traceback(server_fixture, caplog):
+    server_fixture.meteo.temp_for_location.side_effect = ValueError("Location 'Tessin' is not one of the places")
+
+    with caplog.at_level(logging.INFO), pytest.raises(ToolError, match="Location 'Tessin' is not one of") as raised:
+        await server_fixture.mcp.call_tool("temperature", {"location": "Tessin", "when": "2026-09-24T14:00"})
+
+    assert not isinstance(raised.value, UnexpectedToolError)
+    for record in caplog.records:
+        assert record.exc_info is None, f"traceback logged by {record.name}"
+
+
+@pytest.mark.asyncio
+async def test_a_timestamp_the_model_got_wrong_is_explained_to_it(server_fixture):
+    with pytest.raises(ToolError, match="is not a valid timestamp"):
+        await server_fixture.mcp.call_tool("temperature", {"location": "Zurich", "when": "tomorrow"})
+
+
+@pytest.mark.asyncio
+async def test_meteoswiss_being_unreachable_is_explained_to_the_model(server_fixture):
+    server_fixture.meteo.temp_for_location.side_effect = requests.ConnectionError("connection refused")
+
+    with pytest.raises(ToolError, match="Could not reach MeteoSwiss"):
+        await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
+
+
+@pytest.mark.asyncio
+async def test_an_unexpected_failure_is_hidden_from_the_model(server_fixture):
+    # A bug is a crash: the SDK logs the traceback and tells the model nothing about the internals
+    server_fixture.meteo.temp_for_location.side_effect = KeyError("internal detail")
+
+    with pytest.raises(UnexpectedToolError) as raised:
+        await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
+    assert "internal detail" not in str(raised.value)
