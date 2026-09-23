@@ -331,15 +331,30 @@ class LocalForecast:
 
     def _drop_superseded_runs(self, current_run: str) -> None:
         """
-        Remove the folders of runs that a newer one has replaced.
+        Remove the folders of runs that newer ones have replaced, keeping the run just before this
+        one.
 
-        Only the current run's folder is ever read, so this reclaims space rather than protecting
-        correctness, and it runs after a successful download rather than on a timer.
+        Several server processes can share this cache, because with the stdio transport every
+        client session starts its own. Each remembers the newest run for up to RUN_LOOKUP_MAX_AGE,
+        so one process can still be reading the previous run while another has moved on. Deleting
+        that folder would pull the file out from under it. Runs are published about an hour apart,
+        measured at 57 to 62 minutes over two days, so a process is never more than one run behind
+        and keeping the previous run is enough. For the same reason, newer runs are never touched.
+
+        It runs after a successful download rather than on a timer. The run stamps are fixed width,
+        so comparing them as text compares them in time.
         """
+        older_runs = []
         for folder in (self.cache_dir / "runs").iterdir():
-            if folder.is_dir() and folder.name != current_run:
-                logger.info(f"Dropping superseded run {folder.name}")
-                shutil.rmtree(folder, ignore_errors=True)
+            if folder.is_dir() and folder.name < current_run:
+                older_runs.append(folder)
+
+        older_runs.sort()
+
+        # The last of the older runs is the previous one, which another process may still read
+        for folder in older_runs[:-1]:
+            logger.info(f"Dropping superseded run {folder.name}")
+            shutil.rmtree(folder, ignore_errors=True)
 
     def _cached_file(self, parameter: str, point: Point, run: str, url: str) -> Path:
         """
