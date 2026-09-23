@@ -186,20 +186,21 @@ altitude, the time it applies to, and the model run the forecast came from.
 | `current_date_and_time()` | Current date and time in Swiss local time | `current_date_and_time()` |
 | `daily_forecast(location, date)` | Whole day: min/max temperature, rainfall with its 10–90% range, worded summary | `daily_forecast("Zurich", "2026-09-23")` |
 | `weather_description(location, when)` | The weather in words, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
-| `temperature(location, when)` | Air temperature (°C), hourly mean 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
+| `temperature(location, when)` | Air temperature (°C), mean of the hour up to that time, 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
 | `total_rainfall(location, start, end)` | Rainfall (mm) summed over a period | `total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
 | `sunshine_hours(location, start, end)` | Sunshine (h) summed over a period | `sunshine_hours("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
-| `precipitation_probability(location, when)` | Chance of rain (%) over a 3-hour window | `precipitation_probability("Zurich", "2026-09-23T14:00")` |
-| `precipitation_rate(location, when)` | Rainfall (mm) during that hour | `precipitation_rate("Zurich", "2026-09-23T14:00")` |
-| `wind_speed(location, when)` | Wind speed (km/h), hourly mean | `wind_speed("Zurich", "2026-09-23T14:00")` |
-| `wind_gusts(location, when)` | Strongest one-second gust (km/h) in that hour | `wind_gusts("Säntis", "2026-09-23T14:00")` |
+| `precipitation_probability(location, when)` | Chance of rain (%) over the 3 hours up to that time | `precipitation_probability("Zurich", "2026-09-23T14:00")` |
+| `precipitation_rate(location, when)` | Rainfall (mm) in the hour up to that time | `precipitation_rate("Zurich", "2026-09-23T14:00")` |
+| `wind_speed(location, when)` | Wind speed (km/h), mean of the hour up to that time | `wind_speed("Zurich", "2026-09-23T14:00")` |
+| `wind_gusts(location, when)` | Strongest one-second gust (km/h) in the hour up to that time | `wind_gusts("Säntis", "2026-09-23T14:00")` |
 | `wind_direction(location, when)` | Direction the wind blows from, in degrees and as a compass point | `wind_direction("Zurich", "2026-09-23T14:00")` |
 | `total_cloud_cover(location, when)` | Cloud cover (%) plus the low, medium and high layers | `total_cloud_cover("Zurich", "2026-09-23T14:00")` |
 | `freezing_level(location, when)` | Height of the 0 °C line (m above sea level) | `freezing_level("Zermatt", "2026-09-23T14:00")` |
 
 **Time**
 - Timestamps are ISO and read as Swiss local time, e.g. `"2026-09-23T14:00"`. An explicit offset is honoured.
-- Periods run from `start` up to, but not including, `end`.
+- MeteoSwiss stamps each hourly value at the end of its hour, so `14:00` means 13:00 to 14:00, and a
+  period from `start` to `end` covers exactly the hours in between.
 - The forecast reaches about 9 days ahead from the newest run, so the window shrinks slightly as the day goes on.
 
 > **Note:** Ask `current_date_and_time()` first when the question is relative, such as "tomorrow" or

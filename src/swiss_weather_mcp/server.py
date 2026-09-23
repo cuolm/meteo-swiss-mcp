@@ -156,8 +156,8 @@ class MeteoSwissMCPServer:
             """
             Get the air temperature for a location at a specific time.
 
-            This is the mean over that hour, 2 metres above ground. For a day's highest and lowest
-            temperature use daily_forecast instead.
+            This is the mean over the hour up to that time, 2 metres above ground, so 14:00 means
+            13:00 to 14:00. For a day's highest and lowest temperature use daily_forecast instead.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
@@ -184,7 +184,7 @@ class MeteoSwissMCPServer:
             """
             Get the total rainfall for a location over a period.
 
-            The hourly amounts are added up from start up to, but not including, end.
+            The hourly amounts are added up over exactly the hours from start to end.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
@@ -245,8 +245,8 @@ class MeteoSwissMCPServer:
             """
             Get how likely rain is for a location at a specific time.
 
-            The probability covers a three hour window, not a single instant. Use this for "will it
-            rain", and total_rainfall for "how much".
+            The probability covers the three hours up to that time, not a single instant. Use this
+            for "will it rain", and total_rainfall for "how much".
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
@@ -273,7 +273,8 @@ class MeteoSwissMCPServer:
             """
             Get how much rain falls at a location during one hour.
 
-            This is the amount for that hour alone. For a longer period use total_rainfall.
+            This is the amount in the hour up to that time, so 14:00 means 13:00 to 14:00. For a
+            longer period use total_rainfall.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
@@ -300,8 +301,8 @@ class MeteoSwissMCPServer:
             """
             Get the wind speed for a location at a specific time.
 
-            This is the mean over that hour. For the strongest gusts use wind_gusts instead, which
-            is what matters for whether the wind is dangerous.
+            This is the mean over the hour up to that time. For the strongest gusts use wind_gusts
+            instead, which is what matters for whether the wind is dangerous.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
@@ -328,8 +329,8 @@ class MeteoSwissMCPServer:
             """
             Get the strongest wind gust expected at a location during one hour.
 
-            This is the peak one second gust within that hour, which is usually much higher than
-            the mean wind speed and is what makes wind hazardous.
+            This is the peak one second gust within the hour up to that time, which is usually
+            much higher than the mean wind speed and is what makes wind hazardous.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
@@ -356,8 +357,8 @@ class MeteoSwissMCPServer:
             """
             Get the direction the wind blows from at a location at a specific time.
 
-            Reported as the hourly mean, in degrees clockwise from north, so 0 is a north wind and
-            180 a south wind.
+            Reported as the mean over the hour up to that time, in degrees clockwise from north, so
+            0 is a north wind and 180 a south wind.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").

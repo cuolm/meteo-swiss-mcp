@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -37,9 +37,19 @@ DAILY_PARAMETERS = (
 )
 
 
-def _utc_hour(moment: datetime) -> datetime:
-    """Round a moment down to the UTC hour the forecast rows are keyed by."""
-    return moment.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+def _closing_stamp(moment: datetime) -> datetime:
+    """
+    Return the stamp of the forecast row whose hour contains a moment.
+
+    MeteoSwiss stamps each hourly value at the end of the hour it covers, so the row stamped 14:00
+    is the hour from 13:00 to 14:00. A moment on the full hour therefore reads the row stamped at
+    that hour, and 14:30 reads the row stamped 15:00.
+    """
+    moment = moment.astimezone(timezone.utc)
+    full_hour = moment.replace(minute=0, second=0, microsecond=0)
+    if full_hour < moment:
+        return full_hour + timedelta(hours=1)
+    return full_hour
 
 
 def _swiss(moment: datetime) -> str:
@@ -90,24 +100,29 @@ class MeteoSwissPredictions:
         return await asyncio.to_thread(self.forecast.series, parameter, point)
 
     def _value_at(self, series: Series, when: datetime, point: Point, parameter: str) -> float:
-        """Pick the forecast hour containing the requested time."""
-        hour = _utc_hour(when)
-        if hour not in series.values:
+        """Pick the forecast row whose hour contains the requested time."""
+        stamp = _closing_stamp(when)
+        if stamp not in series.values:
             raise ValueError(
                 f"{_swiss(when)} is outside the forecast for {point.label()}. "
                 f"{_covered_range(series, parameter)}"
             )
-        return series.values[hour]
+        return series.values[stamp]
 
     def _sum_between(self, series: Series, start: datetime, end: datetime, point: Point, parameter: str) -> float:
-        """Add up the hourly values from start up to, but not including, end."""
-        first_hour = _utc_hour(start)
-        last_hour = _utc_hour(end)
+        """
+        Add up the hourly values of the period from start to end.
+
+        Each row covers the hour before its stamp, so the rows stamped after start, up to and
+        including end, are exactly the hours of the period.
+        """
+        first_stamp = _closing_stamp(start)
+        last_stamp = _closing_stamp(end)
 
         total = 0.0
         counted = 0
-        for hour, value in series.values.items():
-            if first_hour <= hour < last_hour:
+        for stamp, value in series.values.items():
+            if first_stamp < stamp <= last_stamp:
                 total += value
                 counted += 1
 
