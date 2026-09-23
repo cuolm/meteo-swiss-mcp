@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from . import parameters
 from .localforecast import SWISS_TZ, LocalForecast, Point, Series
@@ -247,48 +247,21 @@ class SwissWeatherPredictions:
             high_percent=round(layers["high"] * 100, 1),
         )
 
-    async def _daily_value(
-        self, parameter: str, point: Point, day: date
-    ) -> Tuple[Optional[float], Optional[datetime]]:
-        """
-        Read one daily parameter for one calendar day.
-
-        Not every location carries every daily parameter, the regional entries in particular, so a
-        missing one is reported as None instead of failing the whole summary.
-
-        Parameters:
-            parameter (str): MeteoSwiss parameter shortname (e.g., "tre200px").
-            point (Point): The resolved forecast point.
-            day (date): The Swiss calendar day wanted.
-
-        Returns:
-            Tuple[Optional[float], Optional[datetime]]: The value and the run it came from, or
-                (None, None) when MeteoSwiss does not publish it here.
-        """
+    async def _read_series_if_published(self, parameter: str, point: Point) -> Optional[Series]:
+        """Read one parameter for one point, or return None when MeteoSwiss does not publish it there."""
         try:
-            series = await self._read_series(parameter, point)
+            return await self._read_series(parameter, point)
         except ValueError as error:
             logger.info(f"daily_forecast: no {parameter} for {point.label}: {error}")
-            return None, None
+            return None
 
-        # Daily rows are stamped at midnight UTC, which is the same calendar day in Switzerland
-        for measured_at, value in series.values.items():
-            if measured_at.date() == day:
-                return value, series.run_time
-
-        logger.info(f"daily_forecast: {parameter} does not reach {day} for {point.label}")
-        return None, series.run_time
-
-    async def daily_forecast_for_location(self, location: str, day: datetime) -> Dict[str, Any]:
+    async def daily_forecast_for_location(self, location: str, day: date) -> Dict[str, Any]:
         """
         Read the whole-day summary for a location.
 
-        The daily parameters answer this far more cheaply than the hourly ones: six daily files are
-        about 7 MB together, where the hourly equivalent is about 124 MB.
-
         Parameters:
             location (str): Location name or postal code.
-            day (datetime): Any moment on the day wanted, timezone aware.
+            day (date): The Swiss calendar day.
 
         Returns:
             Dict[str, Any]: Minimum and maximum temperature, the median rainfall with its 10th and
@@ -296,27 +269,31 @@ class SwissWeatherPredictions:
                 MeteoSwiss does not publish for this location are None.
         """
         point = await self._find_point(location)
-        calendar_day = day.astimezone(SWISS_TZ).date()
+        # A daily row is stamped 00:00 on the Swiss calendar day it describes
+        day_stamp = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
 
         summary: Dict[str, Any] = {
             "location": point.label,
             "altitude_m": point.altitude_m,
-            "date": calendar_day.isoformat(),
+            "date": day.isoformat(),
         }
-
-        run: Optional[datetime] = None
+        run_time: Optional[datetime] = None
         for field, parameter in DAILY_PARAMETERS:
-            value, parameter_run = await self._daily_value(parameter, point, calendar_day)
-            run = parameter_run or run
-            summary[field] = value
+            series = await self._read_series_if_published(parameter, point)
+            if series is None:
+                summary[field] = None
+                continue
+            run_time = series.run_time
+            summary[field] = series.values.get(day_stamp)
 
-        if run is None:
-            raise ValueError(f"MeteoSwiss publishes no daily forecast for {point.label}, try a nearby town.")
+        values = [summary[field] for field, _ in DAILY_PARAMETERS]
+        if all(value is None for value in values):
+            raise ValueError(f"MeteoSwiss has no daily forecast for {point.label} on {day.isoformat()}.")
 
         # The pictogram is published as a code, which is only useful once it is spelled out
         if summary["weather"] is not None:
             summary["pictogram_code"] = int(summary["weather"])
             summary["weather"] = _describe_pictogram(summary["pictogram_code"])
 
-        summary["model_run"] = _format_swiss_time(run)
+        summary["model_run"] = _format_swiss_time(run_time)
         return summary
