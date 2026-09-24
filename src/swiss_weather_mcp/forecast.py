@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from . import parameters
-from .localforecast import SWISS_TZ, LocalForecast, Point, Series
+from .meteoswiss import SWISS_TZ, ForecastPoint, ForecastSeries, LocalForecastSource
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def _format_swiss_time(moment: datetime) -> str:
     return moment.astimezone(SWISS_TZ).isoformat(timespec="minutes")
 
 
-def _describe_covered_range(series: Series, parameter: str) -> str:
+def _describe_covered_range(series: ForecastSeries, parameter: str) -> str:
     """Say which times a series covers, for an error message."""
     return (
         f"'{parameter}' covers {_format_swiss_time(min(series.values))} to "
@@ -75,19 +75,19 @@ def _find_compass_point(degrees: float) -> str:
     return COMPASS_POINTS[sector]
 
 
-class SwissWeatherPredictions:
-    def __init__(self, forecast: LocalForecast):
-        self.forecast = forecast
+class ForecastService:
+    def __init__(self, forecast_source: LocalForecastSource):
+        self.forecast_source = forecast_source
 
-    async def _find_point(self, location: str) -> Point:
+    async def _find_point(self, location: str) -> ForecastPoint:
         """Find the forecast point for a location in a worker thread, so a download does not block other requests."""
-        return await asyncio.to_thread(self.forecast.find_point, location)
+        return await asyncio.to_thread(self.forecast_source.find_point, location)
 
-    async def _read_series(self, parameter: str, point: Point) -> Series:
+    async def _read_series(self, parameter: str, point: ForecastPoint) -> ForecastSeries:
         """Read one parameter for one point in a worker thread, so a download does not block other requests."""
-        return await asyncio.to_thread(self.forecast.read_series, parameter, point)
+        return await asyncio.to_thread(self.forecast_source.read_series, parameter, point)
 
-    def _read_value_at(self, series: Series, when: datetime, point: Point, parameter: str) -> float:
+    def _read_value_at(self, series: ForecastSeries, when: datetime, point: ForecastPoint, parameter: str) -> float:
         """
         Return the value at a time: an average or sum from the row whose hour contains the time,
         a snapshot from the row stamped closest to it.
@@ -103,7 +103,7 @@ class SwissWeatherPredictions:
             )
         return series.values[stamp]
 
-    def _sum_between(self, series: Series, start: datetime, end: datetime, point: Point, parameter: str) -> float:
+    def _sum_between(self, series: ForecastSeries, start: datetime, end: datetime, point: ForecastPoint, parameter: str) -> float:
         """Add up the hourly values from start to end."""
         first_stamp = _find_closing_stamp(start)
         last_stamp = _find_closing_stamp(end)
@@ -123,7 +123,7 @@ class SwissWeatherPredictions:
             )
         return total
 
-    def _build_answer(self, value: Any, unit: str, point: Point, run_time: datetime, **fields: Any) -> Dict[str, Any]:
+    def _build_answer(self, value: Any, unit: str, point: ForecastPoint, run_time: datetime, **fields: Any) -> Dict[str, Any]:
         """Build a tool answer: the value and unit, the resolved point, extra fields and the model run."""
         answer = {"value": value, "unit": unit, "location": point.display_name, "altitude_m": point.altitude_m}
         answer.update(fields)
@@ -216,7 +216,7 @@ class SwissWeatherPredictions:
             high_percent=round(layers["high"] * 100, 1),
         )
 
-    async def _read_series_if_published(self, parameter: str, point: Point) -> Optional[Series]:
+    async def _read_series_if_published(self, parameter: str, point: ForecastPoint) -> Optional[ForecastSeries]:
         """Read one parameter for one point, or return None when MeteoSwiss does not publish it there."""
         try:
             return await self._read_series(parameter, point)

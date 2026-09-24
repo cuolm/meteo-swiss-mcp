@@ -29,8 +29,8 @@ Additionally there is also an MCP client that can be run to test the server usin
 swiss-weather-mcp/
 ├── src/swiss_weather_mcp/
 │   ├── server.py           # MCP server
-│   ├── predictions.py      # Weather values, units and aggregation
-│   ├── localforecast.py    # MeteoSwiss data source, caching and location lookup
+│   ├── forecast.py         # Weather values, units and aggregation
+│   ├── meteoswiss.py       # MeteoSwiss data source, caching and location lookup
 │   ├── parameters.py       # MeteoSwiss parameter codes and pictogram meanings
 │   └── client.py           # MCP client (optional)
 ├── tests/swiss_weather_mcp/  # Pytest suite
