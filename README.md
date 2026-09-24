@@ -222,10 +222,12 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 > parameter, so prefer it when the question is about a day rather than an hour. `total_cloud_cover`
 > is the most expensive because it reads three files.
 
-> **Note:** Temperature and rain are the median of the forecast: half of the possible outcomes lie
-> below it and half above. It is not the most likely value. Medians do not add up: when showers are
-> possible but unlikely in any single hour, every hourly amount is 0, while the day as a whole still
-> has a median of several millimetres. Ask `daily_forecast` for the rain of a day, not `total_rainfall`.
+> **Note:** MeteoSwiss calculates many slightly different possible outcomes, not just one forecast.
+> Temperature and rain are the median of these outcomes: half lie below it and half above. If the
+> possible temperatures at 14:00 are 18, 19, 20, 21 and 23 °C, the median is 20 °C. It is not the most
+> likely value. Medians do not add up: when showers are possible but unlikely in any single hour,
+> every hourly amount is 0, while the day as a whole still has a median of several millimetres. Ask
+> `daily_forecast` for the rain of a day, not `total_rainfall`.
 
 ## Example Usage with LMStudio
 
