@@ -1,5 +1,6 @@
 """Fake MeteoSwiss data and responses shared by the tests."""
 from datetime import datetime
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 POINT_TABLE_COLUMNS = (
@@ -22,9 +23,9 @@ EARLIER_RUN_ID = "202609221200"
 
 def build_point_table_csv() -> bytes:
     lines = [POINT_TABLE_COLUMNS]
-    for point_id, type_id, abbr, postal_code, name, altitude in POINT_TABLE_ROWS:
+    for point_id, point_type_id, station_abbr, postal_code, name, altitude_m in POINT_TABLE_ROWS:
         lines.append(
-            f"{point_id};{type_id};{abbr};{postal_code};{name};Ort;Lieu;Luogo;Place;{altitude};0;0;47.0;8.0"
+            f"{point_id};{point_type_id};{station_abbr};{postal_code};{name};Ort;Lieu;Luogo;Place;{altitude_m};0;0;47.0;8.0"
         )
     return ("\r\n".join(lines) + "\r\n").encode("latin-1")
 
@@ -35,13 +36,13 @@ def build_parameter_csv(parameter: str, values: dict, point: str = "800100;2") -
     for stamp, value in values.items():
         lines.append(f"{point};{stamp};{value}")
         lines.append(f"999999;2;{stamp};-1")  # another location, which must be filtered out
-    return ("\r\n".join(lines) + "\r\n").encode("latin-1")
+    return ("\n".join(lines) + "\n").encode("latin-1")
 
 
 class FakeResponse:
     """Stand in for a streamed requests response."""
 
-    def __init__(self, body: bytes = b"", status_code: int = 200, payload: dict = None):
+    def __init__(self, body: bytes = b"", status_code: int = 200, payload: Optional[dict] = None):
         self.body = body
         self.status_code = status_code
         self.payload = payload
