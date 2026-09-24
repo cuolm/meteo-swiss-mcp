@@ -18,9 +18,7 @@ POINT_TABLE_URL = f"https://data.geo.admin.ch/{COLLECTION_ID}/ogd-local-forecast
 
 SWISS_TZ = ZoneInfo("Europe/Zurich")
 
-# The point table only changes when MeteoSwiss adds a location, so it is refetched rarely
 POINT_TABLE_MAX_AGE = timedelta(days=7)
-# A run is published every hour, rechecking a few times an hour picks a new one up promptly
 RUN_LOOKUP_MAX_AGE = timedelta(minutes=5)
 REQUEST_TIMEOUT_SECONDS = 60
 DOWNLOAD_CHUNK_BYTES = 1 << 20
@@ -128,7 +126,6 @@ class LocalForecast:
         self.cache_dir = cache_dir
         self.cache_all_locations = cache_all_locations
         self.points: List[Point] = []
-        # The newest run, its parameter file URLs, and when that was last asked for
         self.run_id: Optional[str] = None
         self.run_file_urls: Dict[str, str] = {}
         self.run_checked_at: Optional[datetime] = None
@@ -180,7 +177,6 @@ class LocalForecast:
         points = self._load_points()
         normalised_location = _normalise(location)
 
-        # Exact matches only: the nearest name to "Wallis" is "Wallisellen", 150 km from the canton
         matches = [point for point in points if point.postal_code == normalised_location]
         if not matches:
             matches = [point for point in points if _normalise(point.name) == normalised_location]
@@ -228,7 +224,7 @@ class LocalForecast:
         for day in (today, today - timedelta(days=1)):
             file_urls_by_run = self._fetch_file_urls_by_run(day)
             if file_urls_by_run:
-                # The stamp is fixed width and zero padded, so the newest run is the largest string
+                # Run IDs are fixed width, so the newest run is the largest string
                 self.run_id = max(file_urls_by_run)
                 self.run_file_urls = file_urls_by_run[self.run_id]
                 self.run_checked_at = now
@@ -248,16 +244,14 @@ class LocalForecast:
 
         older_runs.sort()
 
-        # The last of the older runs is the previous one. With stdio every client session starts
-        # its own server process, and one may still read that run for up to RUN_LOOKUP_MAX_AGE.
-        # Runs are about an hour apart, so no process is more than one run behind.
+        # Keep the previous run. Another request, or another server using the same cache, may
+        # still read from it for a few minutes. Runs come an hour apart, so one is enough.
         for folder in older_runs[:-1]:
             logger.info(f"Dropping superseded run {folder.name}")
             shutil.rmtree(folder, ignore_errors=True)
 
     def _ensure_parameter_file(self, parameter: str, point: Point, run_id: str, url: str) -> Path:
         """Return the cached file with this parameter for this point and run, downloading it if missing."""
-        # Named by the MeteoSwiss run ID, which is UTC: Swiss time repeats an hour in October
         run_dir = self.cache_dir / "runs" / run_id
         full_file = run_dir / f"{parameter}.csv"
         point_file = run_dir / f"{parameter}_{point.point_id}_{point.point_type_id}.csv"
@@ -268,8 +262,6 @@ class LocalForecast:
         if point_file.exists():
             return point_file
 
-        # The published file holds every location and runs to tens of megabytes. By default only
-        # this point's rows are kept, a few kilobytes, and the rest is discarded while streaming.
         logger.info(f"Reading {parameter} for {point.label} from run {run_id}")
         if self.cache_all_locations:
             _download(url, full_file)
@@ -312,8 +304,7 @@ class LocalForecast:
         """
         run_id, file_urls = self.find_latest_run()
         if parameter not in file_urls:
-            # The run and the published codes help whoever finds out what MeteoSwiss changed, but mean
-            # nothing to the model reading the error, so they go to the log only
+            # The run and the codes help debugging, the model cannot use them
             logger.warning(f"Run {run_id} does not publish '{parameter}', it has: {', '.join(sorted(file_urls))}")
             raise ValueError(f"MeteoSwiss's newest forecast does not include '{parameter}'.")
 
