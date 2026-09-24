@@ -160,7 +160,10 @@ async def _run():
         logger.info(f"MCP Client started!")
         loop = asyncio.get_running_loop()
         while True:
-            query = await loop.run_in_executor(None, input, "\nType your question (or '/bye' to quit): ")
+            try:
+                query = await loop.run_in_executor(None, input, "\nType your question (or '/bye' to quit): ")
+            except EOFError:  # Ctrl+D, or the end of piped input
+                query = "/bye"
             query = query.strip()
             if query.lower() == "/bye":
                 logger.info(f"Goodbye!")
@@ -174,13 +177,14 @@ async def _run():
             answer = await client.process_query(query)
             logger.info(f"Answer: {answer}")
 
-    except KeyboardInterrupt:
-        logger.info(f"Interrupted by user, shutting down...")
     finally:
         await client.close()
 
 def main():
-    asyncio.run(_run())
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user, shutting down")
 
 if __name__ == "__main__":
     main()
