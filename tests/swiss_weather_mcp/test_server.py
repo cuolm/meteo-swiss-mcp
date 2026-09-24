@@ -45,30 +45,30 @@ def server_fixture(mocker, tmp_path):
 
 
 def test_a_timestamp_without_a_zone_is_read_as_swiss_local_time():
-    parsed = _parse_swiss_time("2026-09-23T14:00")
-    assert parsed == datetime(2026, 9, 23, 14, tzinfo=SWISS_TZ)
+    moment = _parse_swiss_time("2026-09-23T14:00")
+    assert moment == datetime(2026, 9, 23, 14, tzinfo=SWISS_TZ)
 
 
 def test_summer_time_is_two_hours_ahead_of_utc():
     # In September Switzerland is on CEST, so 14:00 local is 12:00 UTC
-    parsed = _parse_swiss_time("2026-09-23T14:00")
-    assert parsed.astimezone(timezone.utc).hour == 12
+    moment = _parse_swiss_time("2026-09-23T14:00")
+    assert moment.astimezone(timezone.utc).hour == 12
 
 
 def test_winter_time_is_one_hour_ahead_of_utc():
     # In January Switzerland is on CET, so the same local hour is 13:00 UTC
-    parsed = _parse_swiss_time("2026-01-23T14:00")
-    assert parsed.astimezone(timezone.utc).hour == 13
+    moment = _parse_swiss_time("2026-01-23T14:00")
+    assert moment.astimezone(timezone.utc).hour == 13
 
 
 def test_an_explicit_offset_is_honoured_rather_than_overwritten():
-    parsed = _parse_swiss_time("2026-09-23T14:00+00:00")
-    assert parsed.astimezone(timezone.utc).hour == 14
+    moment = _parse_swiss_time("2026-09-23T14:00+00:00")
+    assert moment.astimezone(timezone.utc).hour == 14
 
 
 def test_a_date_on_its_own_is_read_as_that_day_at_midnight():
-    parsed = _parse_swiss_time("2026-09-23")
-    assert parsed == datetime(2026, 9, 23, 0, 0, tzinfo=SWISS_TZ)
+    moment = _parse_swiss_time("2026-09-23")
+    assert moment == datetime(2026, 9, 23, 0, 0, tzinfo=SWISS_TZ)
 
 
 def test_a_space_between_date_and_time_is_accepted():
@@ -94,8 +94,8 @@ async def test_a_tool_returns_the_forecast_it_was_given(server_fixture):
     answer = {"value": 19.1, "unit": "°C", "location": "Zürich 8001 (409 m)"}
     server_fixture.forecast_service.read_temperature.return_value = answer
 
-    result = await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
-    assert json.loads(result.content[0].text) == answer
+    tool_result = await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
+    assert json.loads(tool_result.content[0].text) == answer
 
 
 @pytest.mark.asyncio
@@ -137,8 +137,8 @@ async def test_an_unexpected_failure_is_hidden_from_the_model(server_fixture):
 @pytest.mark.asyncio
 async def test_the_current_time_can_be_sent_straight_back_to_a_tool(server_fixture):
     # The model builds its next timestamp from this answer, so it must be in the form the tools read
-    result = await server_fixture.mcp.call_tool("current_date_and_time", {})
-    text = result.content[0].text
+    tool_result = await server_fixture.mcp.call_tool("current_date_and_time", {})
+    text = tool_result.content[0].text
     weekday, timestamp = text.removeprefix("Today is ").removesuffix(" (Swiss time)").split(", ")
 
     moment = _parse_swiss_time(timestamp)

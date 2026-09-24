@@ -125,7 +125,7 @@ def test_read_series_stores_only_the_point_rows_by_default(source_fixture, tmp_p
     assert b"999999" not in stored[0].read_bytes()
 
 
-def test_read_series_stores_every_location_when_asked_to(mocker, tmp_path, source_fixture):
+def test_read_series_stores_every_location_when_asked_to(tmp_path, source_fixture):
     source_fixture.cache_all_locations = True
     source_fixture.read_series("tre200h0", source_fixture.find_point("Zürich"))
 
