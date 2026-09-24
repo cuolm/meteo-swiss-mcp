@@ -81,16 +81,16 @@ def _parse_stamp(stamp_text: str) -> datetime:
 
 def _write_point_rows(response: requests.Response, point: ForecastPoint, file: BinaryIO) -> None:
     """Write the rows of one point from a streamed response to a file."""
-    prefix = point.row_prefix
+    row_prefix = point.row_prefix
     # Chunks are split by hand, iter_lines() takes about 45 seconds for the million lines of a file
     remainder = b""
     for chunk in response.iter_content(DOWNLOAD_CHUNK_SIZE_BYTES):
         lines = (remainder + chunk).split(b"\n")
         remainder = lines.pop()  # the last piece may be half a line
         for line in lines:
-            if line.startswith(prefix):
+            if line.startswith(row_prefix):
                 file.write(line + b"\n")
-    if remainder.startswith(prefix):
+    if remainder.startswith(row_prefix):
         file.write(remainder + b"\n")
 
 
@@ -277,18 +277,18 @@ class LocalForecastSource:
 
     def _read_point_values(self, parameter_file: Path, point: ForecastPoint) -> Dict[datetime, float]:
         """Read one point's values from a cached file, keyed by UTC timestamp."""
-        prefix = point.row_prefix
+        row_prefix = point.row_prefix
         values: Dict[datetime, float] = {}
 
         with open(parameter_file, "rb") as file:
             for line in file:
                 # This also skips the header of a full file, a point extract has none
-                if not line.startswith(prefix):
+                if not line.startswith(row_prefix):
                     continue
-                _, _, stamp_text, value = line.decode("latin-1").strip().split(";")
+                _, _, stamp_text, value_text = line.decode("latin-1").strip().split(";")
                 try:
                     stamp = _parse_stamp(stamp_text)
-                    values[stamp] = float(value)
+                    values[stamp] = float(value_text)
                 except ValueError:
                     continue  # gaps are published as empty fields
 
