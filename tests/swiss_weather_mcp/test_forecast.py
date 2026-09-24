@@ -98,7 +98,8 @@ async def test_a_time_outside_the_forecast_names_the_range_that_is_covered(servi
         await service_fixture.read_temperature("Zurich", build_swiss_time("2026-10-30T14:00"))
 
     assert str(raised.value).startswith("2026-10-30T14:00+01:00 is outside the forecast")
-    assert "covers 2026-09-23T08:00+02:00 to 2026-09-23T15:00+02:00" in str(raised.value)
+    assert "The forecast covers 2026-09-23T08:00+02:00 to 2026-09-23T15:00+02:00." in str(raised.value)
+    assert "tre200h0" not in str(raised.value)  # a parameter code means nothing to the model
 
 
 @pytest.mark.asyncio
