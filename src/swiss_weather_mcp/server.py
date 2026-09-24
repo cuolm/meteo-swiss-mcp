@@ -100,6 +100,8 @@ def _handle_tool_call(tool: Callable[..., Awaitable[Dict[str, Any]]]) -> Callabl
 
 
 class SwissWeatherMCPServer:
+    """The MCP server: registers the weather tools and runs them over stdio or streamable HTTP."""
+
     def __init__(self, args: argparse.Namespace) -> None:
         self.host = args.host
         self.port = args.port
@@ -437,6 +439,7 @@ class SwissWeatherMCPServer:
             return await self.forecast_service.read_freezing_level(location, moment)
 
     def run(self):
+        """Serve the tools over the transport given on the command line."""
         if self.transport == "stdio":
             logger.info("Running server with stdio transport")
             self.mcp.run(transport="stdio")
@@ -448,6 +451,7 @@ class SwissWeatherMCPServer:
 
 
 def main():
+    """Start the MCP server from the command line."""
     try:
         args = _parse_args()
         setup_logging(args.log_level)
