@@ -21,7 +21,7 @@ SWISS_TZ = ZoneInfo("Europe/Zurich")
 POINT_TABLE_MAX_AGE = timedelta(days=7)
 RUN_LOOKUP_MAX_AGE = timedelta(minutes=5)
 REQUEST_TIMEOUT_SECONDS = 60
-DOWNLOAD_CHUNK_BYTES = 1 << 20
+DOWNLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
 
 
 class Point(NamedTuple):
@@ -33,8 +33,8 @@ class Point(NamedTuple):
     altitude_m: float
 
     @property
-    def label(self) -> str:
-        """Name the point with its postal code and altitude, such as "Zermatt 3920 (1610 m)"."""
+    def display_name(self) -> str:
+        """The name shown to a reader, with postal code and altitude, such as "Zermatt 3920 (1610 m)"."""
         name_with_code = f"{self.name} {self.postal_code}" if self.postal_code else self.name
         return f"{name_with_code} ({self.altitude_m:.0f} m)"
 
@@ -50,26 +50,28 @@ class Series(NamedTuple):
     values: Dict[datetime, float]
 
 
-def _by_preference(point: Point) -> Tuple[bool, str, int]:
+def _rank_point(point: Point) -> Tuple[bool, str, int]:
     """
-    Sort key for points with the same name: postal code centres before stations, then the
-    lowest postal code, which is the historic centre of a city, then the lowest point id.
+    Rank a point among points with the same name, lower is better: postal code centres before
+    stations, then the lowest postal code, which is the historic centre of a city, then the
+    lowest point id.
     """
     return (not point.postal_code, point.postal_code, int(point.point_id))
 
 
-def _normalise(name: str) -> str:
+def _normalise_location(location: str) -> str:
     """
     Fold case and strip accents so "zurich" finds "Zürich".
 
     Parameters:
-        name (str): Location name as the caller wrote it.
+        location (str): A location name or postal code.
 
     Returns:
-        str: Comparable form of the name.
+        str: Comparable form of the location.
     """
-    folded = unicodedata.normalize("NFKD", name.casefold())
-    return "".join(character for character in folded if not unicodedata.combining(character)).strip()
+    folded = unicodedata.normalize("NFKD", location.casefold())
+    without_accents = "".join(character for character in folded if not unicodedata.combining(character))
+    return without_accents.strip()
 
 
 def _parse_stamp(stamp_text: str) -> datetime:
@@ -82,7 +84,7 @@ def _write_point_rows(response: requests.Response, point: Point, file: BinaryIO)
     prefix = point.row_prefix
     # Chunks are split by hand, iter_lines() takes about 45 seconds for the million lines of a file
     remainder = b""
-    for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
+    for chunk in response.iter_content(DOWNLOAD_CHUNK_SIZE_BYTES):
         lines = (remainder + chunk).split(b"\n")
         remainder = lines.pop()  # the last piece may be half a line
         for line in lines:
@@ -92,29 +94,29 @@ def _write_point_rows(response: requests.Response, point: Point, file: BinaryIO)
         file.write(remainder + b"\n")
 
 
-def _download(url: str, target: Path, only_point: Optional[Point] = None) -> None:
+def _download_file(file_url: str, target_file: Path, only_rows_of: Optional[Point] = None) -> None:
     """
     Stream a file from MeteoSwiss to disk.
 
     Parameters:
-        url (str): The file to download.
-        target (Path): Where the finished file ends up.
-        only_point (Optional[Point]): Keep only this point's rows, or every line when None.
+        file_url (str): The file to download.
+        target_file (Path): Where the finished file ends up.
+        only_rows_of (Optional[Point]): Keep only this point's rows, or every line when None.
     """
-    target.parent.mkdir(parents=True, exist_ok=True)
+    target_file.parent.mkdir(parents=True, exist_ok=True)
     # A unique name, moved into place only when complete, so an interrupted download is never
     # taken for a cached file, and two requests for the same file do not write into each other
-    partial_file = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
+    partial_file = target_file.with_name(f"{target_file.name}.{uuid.uuid4().hex}.tmp")
     try:
-        with requests.get(url, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with requests.get(file_url, stream=True, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             response.raise_for_status()
             with open(partial_file, "wb") as file:
-                if only_point is None:
-                    for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
+                if only_rows_of is None:
+                    for chunk in response.iter_content(DOWNLOAD_CHUNK_SIZE_BYTES):
                         file.write(chunk)
                 else:
-                    _write_point_rows(response, only_point, file)
-        partial_file.replace(target)
+                    _write_point_rows(response, only_rows_of, file)
+        partial_file.replace(target_file)
     finally:
         partial_file.unlink(missing_ok=True)
 
@@ -140,7 +142,7 @@ class LocalForecast:
                 return point_table
 
         logger.info("Downloading the MeteoSwiss forecast point table")
-        _download(POINT_TABLE_URL, point_table)
+        _download_file(POINT_TABLE_URL, point_table)
         return point_table
 
     def _load_points(self) -> List[Point]:
@@ -175,18 +177,18 @@ class LocalForecast:
             Point: The resolved forecast point.
         """
         points = self._load_points()
-        normalised_location = _normalise(location)
+        normalised_location = _normalise_location(location)
 
         matches = [point for point in points if point.postal_code == normalised_location]
         if not matches:
-            matches = [point for point in points if _normalise(point.name) == normalised_location]
+            matches = [point for point in points if _normalise_location(point.name) == normalised_location]
         if not matches:
             raise ValueError(
                 f"Location '{location}' is not one of the {len(points)} places MeteoSwiss publishes "
                 f"forecasts for. Check the spelling, or try a nearby town, village or postal code."
             )
 
-        return min(matches, key=_by_preference)
+        return min(matches, key=_rank_point)
 
     def _fetch_file_urls_by_run(self, day: date) -> Dict[str, Dict[str, str]]:
         """Return the file URLs of one daily STAC item, grouped by run and keyed by parameter."""
@@ -250,7 +252,7 @@ class LocalForecast:
             logger.info(f"Dropping superseded run {folder.name}")
             shutil.rmtree(folder, ignore_errors=True)
 
-    def _ensure_parameter_file(self, parameter: str, point: Point, run_id: str, url: str) -> Path:
+    def _ensure_parameter_file(self, parameter: str, point: Point, run_id: str, file_url: str) -> Path:
         """Return the cached file with this parameter for this point and run, downloading it if missing."""
         run_dir = self.cache_dir / "runs" / run_id
         full_file = run_dir / f"{parameter}.csv"
@@ -262,16 +264,16 @@ class LocalForecast:
         if point_file.exists():
             return point_file
 
-        logger.info(f"Reading {parameter} for {point.label} from run {run_id}")
+        logger.info(f"Reading {parameter} for {point.display_name} from run {run_id}")
         if self.cache_all_locations:
-            _download(url, full_file)
-            target = full_file
+            _download_file(file_url, full_file)
+            downloaded_file = full_file
         else:
-            _download(url, point_file, only_point=point)
-            target = point_file
+            _download_file(file_url, point_file, only_rows_of=point)
+            downloaded_file = point_file
 
         self._drop_superseded_runs(run_id)
-        return target
+        return downloaded_file
 
     def _read_point_values(self, parameter_file: Path, point: Point) -> Dict[datetime, float]:
         """Read one point's values from a cached file, keyed by UTC timestamp."""
@@ -312,7 +314,7 @@ class LocalForecast:
         values = self._read_point_values(parameter_file, point)
         if not values:
             raise ValueError(
-                f"MeteoSwiss publishes no '{parameter}' values for {point.label}. Some entries, "
+                f"MeteoSwiss publishes no '{parameter}' values for {point.display_name}. Some entries, "
                 f"such as the regional ones, only carry part of the forecast, try a nearby town."
             )
 
