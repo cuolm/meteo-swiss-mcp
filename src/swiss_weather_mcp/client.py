@@ -48,6 +48,8 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 class MCPClient:
+    """A test client that lets a local model answer questions with the server's tools."""
+
     def __init__(self, model: str, base_url: str):
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
@@ -58,6 +60,7 @@ class MCPClient:
         self.write_stream: Optional[Any] = None
 
     async def connect_to_server(self) -> None:
+        """Start the server as a subprocess and open a session with it over stdio."""
         # Launch the server module with the same interpreter running this client
         server_params = StdioServerParameters(
             command=sys.executable,
@@ -87,6 +90,7 @@ class MCPClient:
         return self.session
 
     async def fetch_tool_definitions(self) -> List[ChatCompletionFunctionToolParam]:
+        """Fetch the server's tools in the format the OpenAI chat API expects."""
         tools_result = await self._require_session().list_tools()
         return [
             {
@@ -101,6 +105,7 @@ class MCPClient:
         ]
     
     async def call_tool(self, tool_name: str, arguments_json: str) -> str:
+        """Call a tool with the arguments the model wrote as JSON, and return its answer or error as text."""
         logger.info(f"Tool: {tool_name} called with arguments: {arguments_json}")
         try:
             arguments = json.loads(arguments_json or "{}")  # the model writes these as JSON text
@@ -112,10 +117,7 @@ class MCPClient:
             return f"Error calling tool {tool_name}: {error}"
 
     def _format_assistant_message(self, message: ChatCompletionMessage) -> ChatCompletionAssistantMessageParam:
-        """
-        Standardizes assistant messages into a clean dictionary format.
-        Preserves tool_calls while removing internal metadata (images, thinking, etc).
-        """
+        """Keep only what the chat API needs from an assistant message: its text and its tool calls."""
         formatted_message: ChatCompletionAssistantMessageParam = {
             "role": "assistant",
             "content": message.content or ""
@@ -139,6 +141,7 @@ class MCPClient:
         return formatted_message
 
     async def process_query(self, query: str) -> str:
+        """Answer a question: let the model call tools until it gives its final answer, and return it."""
         self.messages.append({"role": "user", "content": query})
         tools = await self.fetch_tool_definitions()
 
@@ -166,6 +169,7 @@ class MCPClient:
                 })
 
     async def close(self):
+        """Close the session and stop the server."""
         await self.exit_stack.aclose()
 
 
@@ -199,6 +203,7 @@ async def _run():
         await client.close()
 
 def main():
+    """Start the test client from the command line."""
     try:
         asyncio.run(_run())
     except KeyboardInterrupt:

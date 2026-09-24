@@ -76,6 +76,8 @@ def _find_compass_point(degrees: float) -> str:
 
 
 class ForecastService:
+    """Answer weather questions for a location: the value, its unit, the resolved point and the model run."""
+
     def __init__(self, forecast_source: LocalForecastSource):
         self.forecast_source = forecast_source
 
@@ -162,29 +164,37 @@ class ForecastService:
         return self._build_answer(value, unit, point, series.run_time, valid_at=_format_swiss_time(moment))
 
     async def read_temperature(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Read the air temperature for the hour up to a moment."""
         return await self._build_hourly_answer(location, parameters.TEMPERATURE, moment, "°C")
 
     async def read_wind_speed(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Read the mean wind speed for the hour up to a moment."""
         return await self._build_hourly_answer(location, parameters.WIND_SPEED, moment, "km/h")
 
     async def read_wind_gusts(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Read the strongest gust in the hour up to a moment."""
         return await self._build_hourly_answer(location, parameters.WIND_GUSTS, moment, "km/h")
 
     async def read_freezing_level(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Read the height of the 0 °C line at a moment."""
         return await self._build_hourly_answer(location, parameters.FREEZING_LEVEL, moment, "m above sea level")
 
     async def read_precipitation_rate(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Read the median rainfall in the hour up to a moment."""
         return await self._build_hourly_answer(location, parameters.PRECIPITATION, moment, "mm/h")
 
     async def read_precipitation_probability(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Read the chance of rain over the 3 hours up to a moment."""
         return await self._build_hourly_answer(location, parameters.PRECIPITATION_PROBABILITY, moment, "%")
 
     async def read_wind_direction(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Read the mean wind direction for the hour up to a moment, in degrees and as a compass point."""
         answer = await self._build_hourly_answer(location, parameters.WIND_DIRECTION, moment, "degrees")
         answer["compass_point"] = _find_compass_point(answer["value"])
         return answer
 
     async def read_weather_description(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Describe the weather in words for the 3 hours up to a moment."""
         point = await self._find_point(location)
         series = await self._read_series(parameters.WEATHER_PICTOGRAM, point)
         pictogram_value = self._read_value_at(series, moment, point, parameters.WEATHER_PICTOGRAM)
@@ -196,6 +206,7 @@ class ForecastService:
         )
 
     async def read_total_rainfall(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
+        """Add up the median rainfall of each hour over a period."""
         point = await self._find_point(location)
         series = await self._read_series(parameters.PRECIPITATION, point)
         rainfall_mm = self._sum_between(series, start_moment, end_moment, point)
@@ -203,6 +214,7 @@ class ForecastService:
                             **{"from": _format_swiss_time(start_moment), "to": _format_swiss_time(end_moment)})
 
     async def read_sunshine_hours(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
+        """Add up the sunshine over a period, in hours."""
         point = await self._find_point(location)
         series = await self._read_series(parameters.SUNSHINE, point)
         sunshine_minutes = self._sum_between(series, start_moment, end_moment, point)
@@ -210,6 +222,7 @@ class ForecastService:
                             **{"from": _format_swiss_time(start_moment), "to": _format_swiss_time(end_moment)})
 
     async def read_total_cloud_cover(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Estimate the total cloud cover at a moment from the three overlapping layers."""
         point = await self._find_point(location)
         layers: Dict[str, float] = {}
         for layer, parameter in CLOUD_LAYERS:
