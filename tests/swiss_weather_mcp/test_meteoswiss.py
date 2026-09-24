@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 
 from fakes import EARLIER_RUN_ID, RUN_ID, FakeResponse, build_stac_item
-from swiss_weather_mcp.meteoswiss import LocalForecastSource
+from swiss_weather_mcp.meteoswiss import ForecastPoint, LocalForecastSource
 
 
 # ── location resolution ──────────────────────────────────────────────────────
@@ -36,6 +36,24 @@ def test_find_point_names_the_location_it_could_not_find(source_fixture):
     with pytest.raises(ValueError, match="'Tessin'"):
         source_fixture.find_point("Tessin")
 
+
+
+def test_find_point_never_reads_a_half_loaded_point_table(mocker, source_fixture):
+    # A second request can ask for a place while the first is still reading the table. Ask for
+    # Davos just after the first place of the table has been read.
+    points_built = []
+    found_meanwhile = []
+
+    def build_point_and_ask_again(**fields):
+        points_built.append(fields["point_id"])
+        if len(points_built) == 2:
+            found_meanwhile.append(source_fixture.find_point("Davos"))
+        return ForecastPoint(**fields)
+
+    mocker.patch("swiss_weather_mcp.meteoswiss.ForecastPoint", side_effect=build_point_and_ask_again)
+    source_fixture.find_point("Zürich")
+
+    assert found_meanwhile[0].point_id == "26"
 
 # ── runs and caching ─────────────────────────────────────────────────────────
 def test_find_latest_run_picks_the_newest_published_run(mocker, tmp_path):
