@@ -63,9 +63,9 @@ def _describe_covered_range(series: ForecastSeries, parameter: str) -> str:
     )
 
 
-def _describe_pictogram(code: int) -> str:
+def _describe_pictogram(pictogram_code: int) -> str:
     """Turn a MeteoSwiss pictogram code into the sentence it stands for."""
-    return parameters.PICTOGRAM_DESCRIPTIONS.get(code, f"unknown weather code {code}")
+    return parameters.PICTOGRAM_DESCRIPTIONS.get(pictogram_code, f"unknown weather code {pictogram_code}")
 
 
 def _find_compass_point(degrees: float) -> str:
@@ -87,26 +87,26 @@ class ForecastService:
         """Read one parameter for one point in a worker thread, so a download does not block other requests."""
         return await asyncio.to_thread(self.forecast_source.read_series, parameter, point)
 
-    def _read_value_at(self, series: ForecastSeries, when: datetime, point: ForecastPoint, parameter: str) -> float:
+    def _read_value_at(self, series: ForecastSeries, moment: datetime, point: ForecastPoint, parameter: str) -> float:
         """
         Return the value at a time: an average or sum from the row whose hour contains the time,
         a snapshot from the row stamped closest to it.
         """
         if parameter in parameters.SNAPSHOTS:
-            stamp = _find_nearest_stamp(when)
+            stamp = _find_nearest_stamp(moment)
         else:
-            stamp = _find_closing_stamp(when)
+            stamp = _find_closing_stamp(moment)
         if stamp not in series.values:
             raise ValueError(
-                f"{_format_swiss_time(when)} is outside the forecast for {point.display_name}. "
+                f"{_format_swiss_time(moment)} is outside the forecast for {point.display_name}. "
                 f"{_describe_covered_range(series, parameter)}"
             )
         return series.values[stamp]
 
-    def _sum_between(self, series: ForecastSeries, start: datetime, end: datetime, point: ForecastPoint, parameter: str) -> float:
+    def _sum_between(self, series: ForecastSeries, start_moment: datetime, end_moment: datetime, point: ForecastPoint, parameter: str) -> float:
         """Add up the hourly values from start to end."""
-        first_stamp = _find_closing_stamp(start)
-        last_stamp = _find_closing_stamp(end)
+        first_stamp = _find_closing_stamp(start_moment)
+        last_stamp = _find_closing_stamp(end_moment)
 
         total = 0.0
         hours_counted = 0
@@ -118,7 +118,7 @@ class ForecastService:
 
         if not hours_counted:
             raise ValueError(
-                f"{_format_swiss_time(start)} to {_format_swiss_time(end)} is outside the forecast for {point.display_name}. "
+                f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)} is outside the forecast for {point.display_name}. "
                 f"{_describe_covered_range(series, parameter)}"
             )
         return total
@@ -130,14 +130,14 @@ class ForecastService:
         answer["model_run"] = _format_swiss_time(run_time)
         return answer
 
-    async def _build_hourly_answer(self, location: str, parameter: str, when: datetime, unit: str) -> Dict[str, Any]:
+    async def _build_hourly_answer(self, location: str, parameter: str, moment: datetime, unit: str) -> Dict[str, Any]:
         """
         Read one parameter for a location at one time.
 
         Parameters:
             location (str): Location name or postal code.
             parameter (str): MeteoSwiss parameter shortname.
-            when (datetime): The forecast hour, timezone aware.
+            moment (datetime): The forecast hour, timezone aware.
             unit (str): Unit the returned value is expressed in.
 
         Returns:
@@ -145,64 +145,64 @@ class ForecastService:
         """
         point = await self._find_point(location)
         series = await self._read_series(parameter, point)
-        value = self._read_value_at(series, when, point, parameter)
-        return self._build_answer(value, unit, point, series.run_time, valid_at=_format_swiss_time(when))
+        value = self._read_value_at(series, moment, point, parameter)
+        return self._build_answer(value, unit, point, series.run_time, valid_at=_format_swiss_time(moment))
 
-    async def temperature_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._build_hourly_answer(location, parameters.TEMPERATURE, when, "°C")
+    async def read_temperature(self, location: str, moment: datetime) -> Dict[str, Any]:
+        return await self._build_hourly_answer(location, parameters.TEMPERATURE, moment, "°C")
 
-    async def wind_speed_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._build_hourly_answer(location, parameters.WIND_SPEED, when, "km/h")
+    async def read_wind_speed(self, location: str, moment: datetime) -> Dict[str, Any]:
+        return await self._build_hourly_answer(location, parameters.WIND_SPEED, moment, "km/h")
 
-    async def wind_gusts_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._build_hourly_answer(location, parameters.WIND_GUSTS, when, "km/h")
+    async def read_wind_gusts(self, location: str, moment: datetime) -> Dict[str, Any]:
+        return await self._build_hourly_answer(location, parameters.WIND_GUSTS, moment, "km/h")
 
-    async def freezing_level_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._build_hourly_answer(location, parameters.FREEZING_LEVEL, when, "m above sea level")
+    async def read_freezing_level(self, location: str, moment: datetime) -> Dict[str, Any]:
+        return await self._build_hourly_answer(location, parameters.FREEZING_LEVEL, moment, "m above sea level")
 
-    async def precipitation_rate_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._build_hourly_answer(location, parameters.PRECIPITATION, when, "mm/h")
+    async def read_precipitation_rate(self, location: str, moment: datetime) -> Dict[str, Any]:
+        return await self._build_hourly_answer(location, parameters.PRECIPITATION, moment, "mm/h")
 
-    async def precipitation_probability_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        return await self._build_hourly_answer(location, parameters.PRECIPITATION_PROBABILITY, when, "%")
+    async def read_precipitation_probability(self, location: str, moment: datetime) -> Dict[str, Any]:
+        return await self._build_hourly_answer(location, parameters.PRECIPITATION_PROBABILITY, moment, "%")
 
-    async def wind_direction_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
-        answer = await self._build_hourly_answer(location, parameters.WIND_DIRECTION, when, "degrees")
+    async def read_wind_direction(self, location: str, moment: datetime) -> Dict[str, Any]:
+        answer = await self._build_hourly_answer(location, parameters.WIND_DIRECTION, moment, "degrees")
         answer["compass_point"] = _find_compass_point(answer["value"])
         return answer
 
-    async def weather_description_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+    async def read_weather_description(self, location: str, moment: datetime) -> Dict[str, Any]:
         point = await self._find_point(location)
         series = await self._read_series(parameters.WEATHER_PICTOGRAM, point)
-        pictogram_value = self._read_value_at(series, when, point, parameters.WEATHER_PICTOGRAM)
+        pictogram_value = self._read_value_at(series, moment, point, parameters.WEATHER_PICTOGRAM)
         pictogram_code = int(pictogram_value)
         description = _describe_pictogram(pictogram_code)
         return self._build_answer(
             description, "description", point, series.run_time,
-            valid_at=_format_swiss_time(when), pictogram_code=pictogram_code,
+            valid_at=_format_swiss_time(moment), pictogram_code=pictogram_code,
         )
 
-    async def total_rainfall_for_location(self, location: str, start: datetime, end: datetime) -> Dict[str, Any]:
+    async def read_total_rainfall(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
         point = await self._find_point(location)
         series = await self._read_series(parameters.PRECIPITATION, point)
-        total = self._sum_between(series, start, end, point, parameters.PRECIPITATION)
-        return self._build_answer(round(total, 1), "mm", point, series.run_time,
-                            **{"from": _format_swiss_time(start), "to": _format_swiss_time(end)})
+        rainfall_mm = self._sum_between(series, start_moment, end_moment, point, parameters.PRECIPITATION)
+        return self._build_answer(round(rainfall_mm, 1), "mm", point, series.run_time,
+                            **{"from": _format_swiss_time(start_moment), "to": _format_swiss_time(end_moment)})
 
-    async def sunshine_hours_for_location(self, location: str, start: datetime, end: datetime) -> Dict[str, Any]:
+    async def read_sunshine_hours(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
         point = await self._find_point(location)
         series = await self._read_series(parameters.SUNSHINE, point)
-        sunshine_minutes = self._sum_between(series, start, end, point, parameters.SUNSHINE)
+        sunshine_minutes = self._sum_between(series, start_moment, end_moment, point, parameters.SUNSHINE)
         return self._build_answer(round(sunshine_minutes / 60, 1), "h", point, series.run_time,
-                            **{"from": _format_swiss_time(start), "to": _format_swiss_time(end)})
+                            **{"from": _format_swiss_time(start_moment), "to": _format_swiss_time(end_moment)})
 
-    async def total_cloud_cover_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
+    async def read_total_cloud_cover(self, location: str, moment: datetime) -> Dict[str, Any]:
         point = await self._find_point(location)
         layers = {}
         run_time = None
         for layer, parameter in CLOUD_LAYERS:
             series = await self._read_series(parameter, point)
-            layers[layer] = self._read_value_at(series, when, point, parameter)
+            layers[layer] = self._read_value_at(series, moment, point, parameter)
             run_time = series.run_time
 
         # The layers overlap, so they cannot simply be added. Assuming they are independent, the sky
@@ -210,7 +210,7 @@ class ForecastService:
         clear_sky = (1 - layers["low"]) * (1 - layers["medium"]) * (1 - layers["high"])
         return self._build_answer(
             round((1 - clear_sky) * 100, 1), "%", point, run_time,
-            valid_at=_format_swiss_time(when),
+            valid_at=_format_swiss_time(moment),
             low_percent=round(layers["low"] * 100, 1),
             medium_percent=round(layers["medium"] * 100, 1),
             high_percent=round(layers["high"] * 100, 1),
@@ -224,7 +224,7 @@ class ForecastService:
             logger.info(f"daily_forecast: no {parameter} for {point.display_name}: {error}")
             return None
 
-    async def daily_forecast_for_location(self, location: str, day: date) -> Dict[str, Any]:
+    async def read_daily_forecast(self, location: str, day: date) -> Dict[str, Any]:
         """
         Read the whole-day summary for a location.
 
