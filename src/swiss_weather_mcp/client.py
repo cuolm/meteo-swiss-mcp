@@ -73,7 +73,7 @@ class MCPClient:
         tool_names = ", ".join(tool.name for tool in tools_result.tools)
         logger.info(f"Connected to server with tools: {tool_names}")
 
-    async def get_mcp_tools(self) -> List[Dict[str, Any]]:
+    async def fetch_tool_definitions(self) -> List[Dict[str, Any]]:
         tools_result = await self.session.list_tools()
         return [
             {
@@ -91,8 +91,8 @@ class MCPClient:
         logger.info(f"Tool: {tool_name} called with arguments: {arguments_json}")
         try:
             arguments = json.loads(arguments_json or "{}")  # the model writes these as JSON text
-            response = await self.session.call_tool(tool_name, arguments)
-            return response.content[0].text
+            tool_result = await self.session.call_tool(tool_name, arguments)
+            return tool_result.content[0].text
         except Exception as error:
             logger.error(f"Tool {tool_name} failed: {error}")
             return f"Error calling tool {tool_name}: {error}"
@@ -125,13 +125,13 @@ class MCPClient:
 
     async def process_query(self, query: str) -> str:
         self.messages.append({"role": "user", "content": query})
-        tools = await self.get_mcp_tools()
+        tools = await self.fetch_tool_definitions()
 
         while True:
-            response = await self.llm_client.chat.completions.create(
+            completion = await self.llm_client.chat.completions.create(
                 model=self.model, messages=self.messages, tools=tools
             )
-            message = response.choices[0].message
+            message = completion.choices[0].message
             self.messages.append(self._format_assistant_message(message))
 
             # If no tools were requested, we have the final answer
@@ -140,14 +140,14 @@ class MCPClient:
 
             # Process each tool call
             for tool_call in message.tool_calls:
-                tool_result = await self.call_tool(tool_call.function.name, tool_call.function.arguments)
+                tool_result_text = await self.call_tool(tool_call.function.name, tool_call.function.arguments)
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
-                    "content": tool_result,
+                    "content": tool_result_text,
                 })
 
-    async def cleanup(self):
+    async def close(self):
         await self.exit_stack.aclose()
 
 
@@ -171,13 +171,13 @@ async def _run():
                 continue
 
             logger.info(f"Query: {query}")
-            response = await client.process_query(query)
-            logger.info(f"Response: {response}")
+            answer = await client.process_query(query)
+            logger.info(f"Answer: {answer}")
 
     except KeyboardInterrupt:
         logger.info(f"Interrupted by user, shutting down...")
     finally:
-        await client.cleanup()
+        await client.close()
 
 def main():
     asyncio.run(_run())
