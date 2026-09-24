@@ -4,9 +4,10 @@ The parameters the server reads from the MeteoSwiss local forecast collection.
 Everything here changes only when MeteoSwiss changes what it publishes. The comment on each code
 is the MeteoSwiss description of that parameter, from ogd-local-forecasting_meta_parameters.csv.
 
-All times are UTC. An hourly average or sum is stamped at the end of the hour it covers, and a
+Hourly times are UTC. An hourly average or sum is stamped at the end of the hour it covers, and a
 3 hourly one at the end of its 3 hours. The SNAPSHOTS below are values at the moment of their stamp
-instead. Daily values are stamped at the start of their day.
+instead. A daily value is not a UTC time: its stamp, such as 202609230000, is the Swiss calendar day
+it describes, 00:00 to 24:00 Swiss local time.
 
 Temperature and rain are the median of the forecast unless they are named as a quantile: half of
 the possible outcomes lie below it and half above, which is not the same as the most likely value.
