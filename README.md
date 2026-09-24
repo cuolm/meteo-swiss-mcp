@@ -5,7 +5,7 @@
 [![Tests](https://github.com/cuolm/swiss-weather-mcp/actions/workflows/tests.yaml/badge.svg)](https://github.com/cuolm/swiss-weather-mcp/actions/workflows/tests.yaml)
 
 A **Model Context Protocol ([MCP](https://modelcontextprotocol.info/))** server that exposes Swiss weather forecast data as callable tools.
-It reads the official [MeteoSwiss local forecast collection](https://opendatadocs.meteoswiss.ch/e-forecast-data/e4-local-forecast-data), caches it locally, and serves predictions such as rainfall, sunshine, temperature, wind and a worded weather summary. MeteoSwiss publishes these forecasts for **5,614 Swiss locations** (weather stations, postal code areas and points of interest), **9 days ahead**, refreshed **every hour**.
+It reads the official [MeteoSwiss local forecast collection](https://opendatadocs.meteoswiss.ch/e-forecast-data/e4-local-forecast-data), caches it locally, and serves predictions such as rainfall, sunshine, temperature, wind and a worded weather summary. MeteoSwiss publishes these forecasts for **5,614 Swiss locations** (weather stations, postal code areas and points of interest), for **today and the next 8 days**, refreshed **every hour**.
 
 Additionally there is also an MCP client that can be run to test the server using the stdio transport.
 
@@ -207,7 +207,7 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 - MeteoSwiss stamps an hourly average or sum at the end of its hour, so `14:00` means 13:00 to 14:00,
   and a period from `start` to `end` covers exactly the hours in between. Cloud cover and the freezing
   level are values at that moment instead.
-- The forecast reaches about 9 days ahead from the newest run, so the window shrinks slightly as the day goes on.
+- The forecast covers today and the next 8 days.
 
 > **Note:** Ask `current_date_and_time()` first when the question is relative, such as "tomorrow" or
 > "tonight", because the tools take a real date rather than an offset.
@@ -217,7 +217,7 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 > and is rejected rather than guessed at. A city covers several postal code areas and resolves to the
 > lowest one, its historic centre, which is why the answer names the point it used.
 
-> **Note:** `daily_forecast` is by far the cheapest tool, roughly 7 MB against about 31 MB per hourly
+> **Note:** `daily_forecast` is by far the cheapest tool, about 8 MB against about 31 MB per hourly
 > parameter, so prefer it when the question is about a day rather than an hour. `total_cloud_cover`
 > is the most expensive because it reads three files.
 
