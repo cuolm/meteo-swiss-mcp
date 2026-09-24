@@ -215,7 +215,7 @@ class SwissWeatherMCPServer:
             Get the total rainfall for a location over a period.
 
             The hourly amounts are added up over exactly the hours from start to end. Each is the
-            most likely amount for its hour, so when showers are possible but unlikely in any single
+            median amount for its hour, so when showers are possible but unlikely in any single
             hour, the sum stays 0 even if the day as a whole is expected to be wet. For the rain of a
             whole day use daily_forecast, and for whether it rains at all precipitation_probability.
 
@@ -292,7 +292,7 @@ class SwissWeatherMCPServer:
             """
             Get how much rain falls at a location during one hour.
 
-            This is the most likely amount in the hour up to that time, so 14:00 means 13:00 to
+            This is the median amount in the hour up to that time, so 14:00 means 13:00 to
             14:00. For whether it rains at all use precipitation_probability, and for a whole day
             daily_forecast.
 
