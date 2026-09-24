@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 from contextlib import AsyncExitStack
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -32,6 +32,7 @@ from . import LOG_LEVELS, setup_logging
 
 logger = logging.getLogger(__name__)
 
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MCP Client")
     parser.add_argument("--model", type=str, required=True,
@@ -47,6 +48,7 @@ def _parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+
 class MCPClient:
     """A test client that lets a local model answer questions with the server's tools."""
 
@@ -56,8 +58,6 @@ class MCPClient:
         self.llm_client = AsyncOpenAI(base_url=base_url, api_key="not-needed")  # local servers ignore the key
         self.model = model
         self.messages: List[ChatCompletionMessageParam] = []
-        self.read_stream: Optional[Any] = None
-        self.write_stream: Optional[Any] = None
 
     async def connect_to_server(self) -> None:
         """Start the server as a subprocess and open a session with it over stdio."""
@@ -67,16 +67,12 @@ class MCPClient:
             args=["-m", "swiss_weather_mcp.server"],
         )
 
-        # Connect to the server
-        stdio_transport = await self.exit_stack.enter_async_context(
+        read_stream, write_stream = await self.exit_stack.enter_async_context(
             stdio_client(server_params)
         )
-        self.read_stream, self.write_stream = stdio_transport
         self.session = await self.exit_stack.enter_async_context(
-            ClientSession(self.read_stream, self.write_stream)
+            ClientSession(read_stream, write_stream)
         )
-
-        # Initialize the connection
         await self.session.initialize()
 
         # List available tools, names only, the descriptions are multi line docstrings
@@ -103,7 +99,7 @@ class MCPClient:
             }
             for tool in tools_result.tools
         ]
-    
+
     async def call_tool(self, tool_name: str, arguments_json: str) -> str:
         """Call a tool with the arguments the model wrote as JSON, and return its answer or error as text."""
         logger.info(f"Tool: {tool_name} called with arguments: {arguments_json}")
@@ -123,7 +119,6 @@ class MCPClient:
             "content": message.content or ""
         }
 
-        # If the model wants to use tools, add them to the dictionary
         if message.tool_calls:
             formatted_message["tool_calls"] = [
                 {
@@ -150,13 +145,12 @@ class MCPClient:
                 model=self.model, messages=self.messages, tools=tools
             )
             message = completion.choices[0].message
-            self.messages.append(self._format_assistant_message(message))
+            assistant_message = self._format_assistant_message(message)
+            self.messages.append(assistant_message)
 
-            # If no tools were requested, we have the final answer
             if not message.tool_calls:
                 return message.content or ""
 
-            # Process each tool call
             for tool_call in message.tool_calls:
                 # Only function tools are offered, so no other kind of call comes back
                 if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
@@ -179,7 +173,7 @@ async def _run():
     client = MCPClient(args.model, args.base_url)
     await client.connect_to_server()
     try:
-        logger.info(f"MCP Client started!")
+        logger.info("MCP Client started!")
         loop = asyncio.get_running_loop()
         while True:
             try:
@@ -188,11 +182,11 @@ async def _run():
                 query = "/bye"
             query = query.strip()
             if query.lower() == "/bye":
-                logger.info(f"Goodbye!")
+                logger.info("Goodbye!")
                 break
 
             if not query:
-                logger.info(f"Please enter a non-empty query.")
+                logger.info("Please enter a non-empty query.")
                 continue
 
             logger.info(f"Query: {query}")
@@ -202,12 +196,14 @@ async def _run():
     finally:
         await client.close()
 
+
 def main():
     """Start the test client from the command line."""
     try:
         asyncio.run(_run())
     except KeyboardInterrupt:
         logger.info("Interrupted by user, shutting down")
+
 
 if __name__ == "__main__":
     main()
