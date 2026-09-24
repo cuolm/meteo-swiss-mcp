@@ -106,7 +106,7 @@ class SwissWeatherMCPServer:
         self.transport = args.transport
         self.mcp = MCPServer(
             name="swiss_weather_mcp_server",
-            instructions="This MCP server provides hourly weather forecast data for Switzerland for up to 9 days ahead.",
+            instructions="This MCP server provides hourly weather forecast data for Switzerland for today and the next 8 days.",
             log_level=args.log_level,  # forwarded to uvicorn, which configures its own loggers
         )
 
@@ -144,7 +144,7 @@ class SwissWeatherMCPServer:
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
                     Must be a place MeteoSwiss publishes forecasts for.
-                date (str): The Swiss calendar day in ISO 8601, e.g. "2026-09-23". Up to 9 days ahead.
+                date (str): The Swiss calendar day in ISO 8601, e.g. "2026-09-23". Today or up to 8 days ahead.
 
             Returns:
                 dict: Minimum and maximum temperature in Celsius; the day's rainfall in millimetres
@@ -171,7 +171,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
                 dict: The description, the MeteoSwiss pictogram code behind it, the resolved
@@ -195,7 +195,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
                 dict: Temperature in Celsius, the resolved location with its altitude, the time it
@@ -273,7 +273,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
                 dict: Probability in percent, the resolved location with its altitude, the time it
@@ -298,7 +298,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
                 dict: Rainfall in millimetres per hour, the resolved location with its altitude, the
@@ -322,7 +322,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
                 dict: Wind speed in kilometres per hour, the resolved location with its altitude,
@@ -346,7 +346,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
                 dict: Gust speed in kilometres per hour, the resolved location with its altitude,
@@ -370,7 +370,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
                 dict: Direction in degrees and as a compass point such as "SW", the resolved
@@ -398,7 +398,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
                 dict: Estimated total cloud cover in percent, the low, medium and high layers in
@@ -423,7 +423,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Up to 9 days ahead.
+                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
                 dict: The freezing level in metres above sea level, the resolved location with its
