@@ -68,8 +68,8 @@ def _describe_pictogram(code: int) -> str:
     return parameters.PICTOGRAM_DESCRIPTIONS.get(code, f"unknown weather code {code}")
 
 
-def _to_compass_point(degrees: float) -> str:
-    """Name the compass point a bearing falls in, such as "SW" for 217 degrees."""
+def _find_compass_point(degrees: float) -> str:
+    """Find the compass point a bearing falls in, such as "SW" for 217 degrees."""
     # The 16 points divide the circle into 22.5 degree sectors, so rounding lands on the nearest
     sector = round(degrees / 22.5) % len(COMPASS_POINTS)
     return COMPASS_POINTS[sector]
@@ -168,7 +168,7 @@ class SwissWeatherPredictions:
 
     async def wind_direction_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
         answer = await self._build_hourly_answer(location, parameters.WIND_DIRECTION, when, "degrees")
-        answer["compass_point"] = _to_compass_point(answer["value"])
+        answer["compass_point"] = _find_compass_point(answer["value"])
         return answer
 
     async def weather_description_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
