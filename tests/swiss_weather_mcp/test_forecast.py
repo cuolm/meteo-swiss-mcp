@@ -20,15 +20,32 @@ async def test_temperature_reports_the_value_with_the_point_it_resolved(service_
 
 @pytest.mark.asyncio
 async def test_sunshine_hours_adds_the_minutes_and_reports_hours(service_fixture):
-    # 08:00 to 16:00 Swiss is 06:00 to 14:00 UTC. The rows stamped 12:00 and 13:00 UTC fall inside:
+    # 08:00 to 15:00 Swiss is 06:00 to 13:00 UTC. The rows stamped 12:00 and 13:00 UTC fall inside:
     # 60 + 45 minutes. The row stamped 06:00 covers 05:00 to 06:00 UTC, before the period starts.
     result = await service_fixture.read_sunshine_hours(
-        "Zurich", build_swiss_time("2026-09-23T08:00"), build_swiss_time("2026-09-23T16:00")
+        "Zurich", build_swiss_time("2026-09-23T08:00"), build_swiss_time("2026-09-23T15:00")
     )
     assert result["value"] == 1.8
     assert result["unit"] == "h"
     assert result["from"] == "2026-09-23T08:00+02:00"
-    assert result["to"] == "2026-09-23T16:00+02:00"
+    assert result["to"] == "2026-09-23T15:00+02:00"
+
+
+@pytest.mark.asyncio
+async def test_a_period_past_the_end_of_the_forecast_is_refused(service_fixture):
+    # The last row is stamped 13:00 UTC, 15:00 Swiss, so a period to 16:00 would be summed short
+    with pytest.raises(ValueError, match="not fully covered by the forecast"):
+        await service_fixture.read_sunshine_hours(
+            "Zurich", build_swiss_time("2026-09-23T14:00"), build_swiss_time("2026-09-23T16:00")
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_period_that_ends_before_it_starts_is_refused(service_fixture):
+    with pytest.raises(ValueError, match="must be after its start"):
+        await service_fixture.read_sunshine_hours(
+            "Zurich", build_swiss_time("2026-09-23T15:00"), build_swiss_time("2026-09-23T09:00")
+        )
 
 
 @pytest.mark.asyncio
