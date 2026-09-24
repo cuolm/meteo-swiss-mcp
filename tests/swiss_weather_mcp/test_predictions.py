@@ -168,6 +168,24 @@ def test_find_latest_run_falls_back_to_yesterday_while_todays_item_is_empty(mock
     assert run_id == RUN_ID
 
 
+def test_find_latest_run_asks_for_the_item_of_the_utc_day(mocker, tmp_path):
+    # 22:30 UTC on 23 September is already 24 September in Switzerland
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 23, 22, 30, tzinfo=timezone.utc).astimezone(tz)
+
+    mocker.patch("swiss_weather_mcp.localforecast.datetime", _FixedDatetime)
+    get_mock = mocker.patch(
+        "swiss_weather_mcp.localforecast.requests.get",
+        return_value=_FakeResponse(payload=_build_stac_item(RUN_ID, ["tre200h0"])),
+    )
+
+    LocalForecast(tmp_path).find_latest_run()
+    requested_url = get_mock.call_args_list[0].args[0]
+    assert requested_url.endswith("/items/20260923-ch")
+
+
 def test_read_series_reads_every_row_including_the_first(forecast_fixture):
     # A point extract carries no header line, so skipping one would lose the first forecast hour
     series = forecast_fixture.read_series("tre200h0", forecast_fixture.find_point("Zürich"))
