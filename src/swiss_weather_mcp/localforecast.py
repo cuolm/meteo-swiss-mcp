@@ -3,7 +3,7 @@ import logging
 import shutil
 import unicodedata
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO, Dict, List, NamedTuple, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -16,7 +16,6 @@ COLLECTION_ID = "ch.meteoschweiz.ogd-local-forecasting"
 STAC_BASE_URL = "https://data.geo.admin.ch/api/stac/v1"
 POINT_TABLE_URL = f"https://data.geo.admin.ch/{COLLECTION_ID}/ogd-local-forecasting_meta_point.csv"
 
-# The item id is built from the Swiss calendar day, the same anchor the published window uses
 SWISS_TZ = ZoneInfo("Europe/Zurich")
 
 # The point table only changes when MeteoSwiss adds a location, so it is refetched rarely
@@ -191,7 +190,7 @@ class LocalForecast:
 
         return min(matches, key=_by_preference)
 
-    def _fetch_assets_by_run(self, day: datetime) -> Dict[str, Dict[str, str]]:
+    def _fetch_assets_by_run(self, day: date) -> Dict[str, Dict[str, str]]:
         """Return one daily STAC item's assets, grouped by run and keyed by parameter."""
         item_url = f"{STAC_BASE_URL}/collections/{COLLECTION_ID}/items/{day.strftime('%Y%m%d')}-ch"
         response = requests.get(item_url, timeout=REQUEST_TIMEOUT_SECONDS)
@@ -219,8 +218,9 @@ class LocalForecast:
         if self.run_checked_at and now - self.run_checked_at < RUN_LOOKUP_MAX_AGE:
             return self.run_id, self.run_assets
 
-        # A day's item exists before its first run lands, so just after midnight it can be empty
-        today = datetime.now(SWISS_TZ)
+        # Items are named by UTC day. Until the first run of a day lands, a few minutes after
+        # 00:00 UTC, the newest run is in yesterday's item
+        today = now.date()
         for day in (today, today - timedelta(days=1)):
             assets_by_run = self._fetch_assets_by_run(day)
             if assets_by_run:
