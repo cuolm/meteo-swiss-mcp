@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 
 from fakes import build_swiss_time
+from swiss_weather_mcp.forecast import _find_compass_point
 
 
 # ── weather values ───────────────────────────────────────────────────────────
@@ -118,3 +119,8 @@ async def test_daily_forecast_reports_a_missing_parameter_instead_of_failing(ser
     assert result["rainfall_median_mm"] is None
     assert result["location"] == "Zürich 8001 (409 m)"
     assert result["date"] == "2026-09-23"
+
+
+def test_a_bearing_turns_into_the_nearest_compass_point():
+    # Each of the 16 points covers 22.5 degrees, and a bearing just short of north wraps round to N
+    assert [_find_compass_point(degrees) for degrees in (0, 11, 12, 90, 217, 355)] == ["N", "N", "NNE", "E", "SW", "N"]
