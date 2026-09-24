@@ -78,12 +78,8 @@ def test_find_latest_run_falls_back_to_yesterday(mocker, tmp_path):
 
 def test_find_latest_run_uses_the_utc_day(mocker, tmp_path):
     # 22:30 UTC on 23 September is already 24 September in Switzerland
-    class _FixedDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime(2026, 9, 23, 22, 30, tzinfo=timezone.utc).astimezone(tz)
-
-    mocker.patch("swiss_weather_mcp.meteoswiss.datetime", _FixedDatetime)
+    datetime_mock = mocker.patch("swiss_weather_mcp.meteoswiss.datetime", wraps=datetime)
+    datetime_mock.now.return_value = datetime(2026, 9, 23, 22, 30, tzinfo=timezone.utc)
     get_mock = mocker.patch(
         "swiss_weather_mcp.meteoswiss.requests.get",
         return_value=FakeResponse(payload=build_stac_item(RUN_ID, ["tre200h0"])),
