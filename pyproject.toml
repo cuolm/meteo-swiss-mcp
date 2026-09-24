@@ -48,7 +48,7 @@ Repository = "https://github.com/cuolm/swiss-weather-mcp.git"
 Issues = "https://github.com/cuolm/swiss-weather-mcp/issues"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]  # add src to sys.path when pytest runs
+pythonpath = ["src", "tests/swiss_weather_mcp"]  # the package, and the shared test fakes
 testpaths = ["tests"]  # make pytest only discover tests under tests/
 addopts = "--import-mode=importlib"  # importlib-based importing for test modules
 asyncio_mode = "strict"

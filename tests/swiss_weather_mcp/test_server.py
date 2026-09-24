@@ -40,7 +40,7 @@ def server_fixture(mocker, tmp_path):
         host="localhost", port=8050, transport="stdio", cache_all_locations=False, log_level="INFO"
     )
     server = SwissWeatherMCPServer(args)
-    server.predictions = mocker.AsyncMock()
+    server.forecast_service = mocker.AsyncMock()
     return server
 
 
@@ -92,7 +92,7 @@ async def test_the_server_offers_every_tool_with_its_arguments(server_fixture):
 @pytest.mark.asyncio
 async def test_a_tool_returns_the_forecast_it_was_given(server_fixture):
     answer = {"value": 19.1, "unit": "°C", "location": "Zürich 8001 (409 m)"}
-    server_fixture.predictions.temperature_for_location.return_value = answer
+    server_fixture.forecast_service.temperature_for_location.return_value = answer
 
     result = await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
     assert json.loads(result.content[0].text) == answer
@@ -100,7 +100,7 @@ async def test_a_tool_returns_the_forecast_it_was_given(server_fixture):
 
 @pytest.mark.asyncio
 async def test_a_failure_the_caller_can_fix_reaches_the_model_without_a_traceback(server_fixture, caplog):
-    server_fixture.predictions.temperature_for_location.side_effect = ValueError("Location 'Tessin' is not one of the places")
+    server_fixture.forecast_service.temperature_for_location.side_effect = ValueError("Location 'Tessin' is not one of the places")
 
     with caplog.at_level(logging.INFO), pytest.raises(ToolError, match="Location 'Tessin' is not one of") as raised:
         await server_fixture.mcp.call_tool("temperature", {"location": "Tessin", "when": "2026-09-24T14:00"})
@@ -118,7 +118,7 @@ async def test_a_timestamp_the_model_got_wrong_is_explained_to_it(server_fixture
 
 @pytest.mark.asyncio
 async def test_meteoswiss_being_unreachable_is_explained_to_the_model(server_fixture):
-    server_fixture.predictions.temperature_for_location.side_effect = requests.ConnectionError("connection refused")
+    server_fixture.forecast_service.temperature_for_location.side_effect = requests.ConnectionError("connection refused")
 
     with pytest.raises(ToolError, match="Could not reach MeteoSwiss"):
         await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
@@ -127,7 +127,7 @@ async def test_meteoswiss_being_unreachable_is_explained_to_the_model(server_fix
 @pytest.mark.asyncio
 async def test_an_unexpected_failure_is_hidden_from_the_model(server_fixture):
     # A bug is a crash: the SDK logs the traceback and tells the model nothing about the internals
-    server_fixture.predictions.temperature_for_location.side_effect = KeyError("internal detail")
+    server_fixture.forecast_service.temperature_for_location.side_effect = KeyError("internal detail")
 
     with pytest.raises(UnexpectedToolError) as raised:
         await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)

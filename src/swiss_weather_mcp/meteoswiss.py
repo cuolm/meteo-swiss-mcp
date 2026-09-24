@@ -24,7 +24,7 @@ REQUEST_TIMEOUT_SECONDS = 60
 DOWNLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
 
 
-class Point(NamedTuple):
+class ForecastPoint(NamedTuple):
     """A forecast location as the MeteoSwiss point table describes it."""
     point_id: str
     point_type_id: str
@@ -44,13 +44,13 @@ class Point(NamedTuple):
         return f"{self.point_id};{self.point_type_id};".encode()
 
 
-class Series(NamedTuple):
+class ForecastSeries(NamedTuple):
     """One parameter over the whole forecast window at one point, with the run it came from."""
     run_time: datetime
     values: Dict[datetime, float]
 
 
-def _rank_point(point: Point) -> Tuple[bool, str, int]:
+def _rank_point(point: ForecastPoint) -> Tuple[bool, str, int]:
     """
     Rank a point among points with the same name, lower is better: postal code centres before
     stations, then the lowest postal code, which is the historic centre of a city, then the
@@ -79,7 +79,7 @@ def _parse_stamp(stamp_text: str) -> datetime:
     return datetime.strptime(stamp_text, "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
 
 
-def _write_point_rows(response: requests.Response, point: Point, file: BinaryIO) -> None:
+def _write_point_rows(response: requests.Response, point: ForecastPoint, file: BinaryIO) -> None:
     """Write the rows of one point from a streamed response to a file."""
     prefix = point.row_prefix
     # Chunks are split by hand, iter_lines() takes about 45 seconds for the million lines of a file
@@ -94,14 +94,14 @@ def _write_point_rows(response: requests.Response, point: Point, file: BinaryIO)
         file.write(remainder + b"\n")
 
 
-def _download_file(file_url: str, target_file: Path, only_rows_of: Optional[Point] = None) -> None:
+def _download_file(file_url: str, target_file: Path, only_rows_of: Optional[ForecastPoint] = None) -> None:
     """
     Stream a file from MeteoSwiss to disk.
 
     Parameters:
         file_url (str): The file to download.
         target_file (Path): Where the finished file ends up.
-        only_rows_of (Optional[Point]): Keep only this point's rows, or every line when None.
+        only_rows_of (Optional[ForecastPoint]): Keep only this point's rows, or every line when None.
     """
     target_file.parent.mkdir(parents=True, exist_ok=True)
     # A unique name, moved into place only when complete, so an interrupted download is never
@@ -121,13 +121,13 @@ def _download_file(file_url: str, target_file: Path, only_rows_of: Optional[Poin
         partial_file.unlink(missing_ok=True)
 
 
-class LocalForecast:
+class LocalForecastSource:
     """Read point forecasts from the MeteoSwiss local forecasting collection, cached per model run."""
 
     def __init__(self, cache_dir: Path, cache_all_locations: bool = False):
         self.cache_dir = cache_dir
         self.cache_all_locations = cache_all_locations
-        self.points: List[Point] = []
+        self.points: List[ForecastPoint] = []
         self.run_id: Optional[str] = None
         self.run_file_urls: Dict[str, str] = {}
         self.run_checked_at: Optional[datetime] = None
@@ -145,7 +145,7 @@ class LocalForecast:
         _download_file(POINT_TABLE_URL, point_table)
         return point_table
 
-    def _load_points(self) -> List[Point]:
+    def _load_points(self) -> List[ForecastPoint]:
         """Read the point table into memory once per process."""
         if self.points:
             return self.points
@@ -153,7 +153,7 @@ class LocalForecast:
         point_table = self._ensure_point_table()
         with open(point_table, newline="", encoding="latin-1") as file:
             for row in csv.DictReader(file, delimiter=";"):
-                self.points.append(Point(
+                self.points.append(ForecastPoint(
                     point_id=row["point_id"],
                     point_type_id=row["point_type_id"],
                     name=row["point_name"],
@@ -163,7 +163,7 @@ class LocalForecast:
         logger.info(f"Loaded {len(self.points)} forecast locations")
         return self.points
 
-    def find_point(self, location: str) -> Point:
+    def find_point(self, location: str) -> ForecastPoint:
         """
         Find the forecast point for a location name or a Swiss postal code.
 
@@ -174,7 +174,7 @@ class LocalForecast:
             location (str): Location name (e.g., "Zurich") or postal code (e.g., "8001").
 
         Returns:
-            Point: The resolved forecast point.
+            ForecastPoint: The resolved forecast point.
         """
         points = self._load_points()
         normalised_location = _normalise_location(location)
@@ -252,7 +252,7 @@ class LocalForecast:
             logger.info(f"Dropping superseded run {folder.name}")
             shutil.rmtree(folder, ignore_errors=True)
 
-    def _ensure_parameter_file(self, parameter: str, point: Point, run_id: str, file_url: str) -> Path:
+    def _ensure_parameter_file(self, parameter: str, point: ForecastPoint, run_id: str, file_url: str) -> Path:
         """Return the cached file with this parameter for this point and run, downloading it if missing."""
         run_dir = self.cache_dir / "runs" / run_id
         full_file = run_dir / f"{parameter}.csv"
@@ -275,7 +275,7 @@ class LocalForecast:
         self._drop_superseded_runs(run_id)
         return downloaded_file
 
-    def _read_point_values(self, parameter_file: Path, point: Point) -> Dict[datetime, float]:
+    def _read_point_values(self, parameter_file: Path, point: ForecastPoint) -> Dict[datetime, float]:
         """Read one point's values from a cached file, keyed by UTC timestamp."""
         prefix = point.row_prefix
         values: Dict[datetime, float] = {}
@@ -294,16 +294,16 @@ class LocalForecast:
 
         return values
 
-    def read_series(self, parameter: str, point: Point) -> Series:
+    def read_series(self, parameter: str, point: ForecastPoint) -> ForecastSeries:
         """
         Read one parameter over the whole forecast window at one point.
 
         Parameters:
             parameter (str): MeteoSwiss parameter shortname (e.g., "tre200h0", "fu3010h0").
-            point (Point): The resolved forecast point.
+            point (ForecastPoint): The resolved forecast point.
 
         Returns:
-            Series: The run the values came from, and the values keyed by UTC timestamp.
+            ForecastSeries: The run the values came from, and the values keyed by UTC timestamp.
         """
         run_id, file_urls = self.find_latest_run()
         if parameter not in file_urls:
@@ -317,4 +317,4 @@ class LocalForecast:
                 f"such as the regional ones, only carry part of the forecast, try a nearby town."
             )
 
-        return Series(run_time=_parse_stamp(run_id), values=values)
+        return ForecastSeries(run_time=_parse_stamp(run_id), values=values)
