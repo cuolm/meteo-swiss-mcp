@@ -287,7 +287,8 @@ class LocalForecast:
                     continue
                 _, _, stamp_text, value = line.decode("latin-1").strip().split(";")
                 try:
-                    values[_parse_stamp(stamp_text)] = float(value)
+                    stamp = _parse_stamp(stamp_text)
+                    values[stamp] = float(value)
                 except ValueError:
                     continue  # gaps are published as empty fields
 
