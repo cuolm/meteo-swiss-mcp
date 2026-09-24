@@ -44,53 +44,58 @@ def server_fixture(mocker, tmp_path):
     return server
 
 
-def test_a_timestamp_without_a_zone_is_read_as_swiss_local_time():
+# --- _parse_swiss_time ---
+
+def test_parse_swiss_time_without_offset():
     moment = _parse_swiss_time("2026-09-23T14:00")
     assert moment == datetime(2026, 9, 23, 14, tzinfo=SWISS_TZ)
 
 
-def test_summer_time_is_two_hours_ahead_of_utc():
+def test_parse_swiss_time_summer():
     # In September Switzerland is on CEST, so 14:00 local is 12:00 UTC
     moment = _parse_swiss_time("2026-09-23T14:00")
     assert moment.astimezone(timezone.utc).hour == 12
 
 
-def test_winter_time_is_one_hour_ahead_of_utc():
+def test_parse_swiss_time_winter():
     # In January Switzerland is on CET, so the same local hour is 13:00 UTC
     moment = _parse_swiss_time("2026-01-23T14:00")
     assert moment.astimezone(timezone.utc).hour == 13
 
 
-def test_an_explicit_offset_is_honoured_rather_than_overwritten():
+def test_parse_swiss_time_keeps_an_explicit_offset():
     moment = _parse_swiss_time("2026-09-23T14:00+00:00")
     assert moment.astimezone(timezone.utc).hour == 14
 
 
-def test_a_date_on_its_own_is_read_as_that_day_at_midnight():
+def test_parse_swiss_time_date_only():
     moment = _parse_swiss_time("2026-09-23")
     assert moment == datetime(2026, 9, 23, 0, 0, tzinfo=SWISS_TZ)
 
 
-def test_a_space_between_date_and_time_is_accepted():
+def test_parse_swiss_time_with_a_space():
     assert _parse_swiss_time("2026-09-23 14:00") == _parse_swiss_time("2026-09-23T14:00")
 
 
-def test_an_unreadable_timestamp_says_what_a_good_one_looks_like():
+def test_parse_swiss_time_invalid():
     with pytest.raises(ValueError, match="2026-09-23T14:00"):
         _parse_swiss_time("tomorrow afternoon")
 
 
-# ── tools ────────────────────────────────────────────────────────────────────
+# --- _register_tools ---
+
 @pytest.mark.asyncio
-async def test_the_server_offers_every_tool_with_its_arguments(server_fixture):
+async def test_register_tools(server_fixture):
     offered = {}
     for tool in await server_fixture.mcp.list_tools():
         offered[tool.name] = list(tool.input_schema.get("properties", {}))
     assert offered == EXPECTED_TOOLS
 
 
+# --- _handle_tool_call ---
+
 @pytest.mark.asyncio
-async def test_a_tool_returns_the_forecast_it_was_given(server_fixture):
+async def test_handle_tool_call_returns_the_answer(server_fixture):
     answer = {"value": 19.1, "unit": "°C", "location": "Zürich 8001 (409 m)"}
     server_fixture.forecast_service.read_temperature.return_value = answer
 
@@ -99,7 +104,7 @@ async def test_a_tool_returns_the_forecast_it_was_given(server_fixture):
 
 
 @pytest.mark.asyncio
-async def test_a_failure_the_caller_can_fix_reaches_the_model_without_a_traceback(server_fixture, caplog):
+async def test_handle_tool_call_value_error(server_fixture, caplog):
     server_fixture.forecast_service.read_temperature.side_effect = ValueError("Location 'Tessin' is not one of the places")
 
     with caplog.at_level(logging.INFO), pytest.raises(ToolError, match="Location 'Tessin' is not one of") as raised:
@@ -111,13 +116,13 @@ async def test_a_failure_the_caller_can_fix_reaches_the_model_without_a_tracebac
 
 
 @pytest.mark.asyncio
-async def test_a_timestamp_the_model_got_wrong_is_explained_to_it(server_fixture):
+async def test_handle_tool_call_invalid_timestamp(server_fixture):
     with pytest.raises(ToolError, match="is not a valid timestamp"):
         await server_fixture.mcp.call_tool("temperature", {"location": "Zurich", "when": "tomorrow"})
 
 
 @pytest.mark.asyncio
-async def test_meteoswiss_being_unreachable_is_explained_to_the_model(server_fixture):
+async def test_handle_tool_call_meteoswiss_unreachable(server_fixture):
     server_fixture.forecast_service.read_temperature.side_effect = requests.ConnectionError("connection refused")
 
     with pytest.raises(ToolError, match="Could not reach MeteoSwiss"):
@@ -125,7 +130,7 @@ async def test_meteoswiss_being_unreachable_is_explained_to_the_model(server_fix
 
 
 @pytest.mark.asyncio
-async def test_an_unexpected_failure_is_hidden_from_the_model(server_fixture):
+async def test_handle_tool_call_unexpected_error(server_fixture):
     # A bug is a crash: the SDK logs the traceback and tells the model nothing about the internals
     server_fixture.forecast_service.read_temperature.side_effect = KeyError("internal detail")
 
@@ -134,8 +139,10 @@ async def test_an_unexpected_failure_is_hidden_from_the_model(server_fixture):
     assert "internal detail" not in str(raised.value)
 
 
+# --- current_date_and_time ---
+
 @pytest.mark.asyncio
-async def test_the_current_time_can_be_sent_straight_back_to_a_tool(server_fixture):
+async def test_current_date_and_time_format(server_fixture):
     # The model builds its next timestamp from this answer, so it must be in the form the tools read
     tool_result = await server_fixture.mcp.call_tool("current_date_and_time", {})
     text = tool_result.content[0].text
