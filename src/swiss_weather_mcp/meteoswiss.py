@@ -127,10 +127,10 @@ class LocalForecastSource:
     def __init__(self, cache_dir: Path, cache_all_locations: bool = False):
         self.cache_dir = cache_dir
         self.cache_all_locations = cache_all_locations
-        self.points: List[ForecastPoint] = []
-        self.run_id: Optional[str] = None
-        self.run_file_urls: Dict[str, str] = {}
-        self.run_checked_at: Optional[datetime] = None
+        self._points: List[ForecastPoint] = []
+        self._run_id: Optional[str] = None
+        self._run_file_urls: Dict[str, str] = {}
+        self._run_checked_at: Optional[datetime] = None
 
     def _ensure_point_table(self) -> Path:
         """Return the cached point table, downloading it when it is missing or stale."""
@@ -147,8 +147,8 @@ class LocalForecastSource:
 
     def _load_points(self) -> List[ForecastPoint]:
         """Read the point table into memory once per process."""
-        if self.points:
-            return self.points
+        if self._points:
+            return self._points
 
         point_table = self._ensure_point_table()
         points: List[ForecastPoint] = []
@@ -162,7 +162,7 @@ class LocalForecastSource:
                     altitude_m=float(row["point_height_masl"]),
                 ))
         # Published only once complete, so a parallel request never sees part of the table
-        self.points = points
+        self._points = points
         logger.info(f"Loaded {len(points)} forecast locations")
         return points
 
@@ -220,8 +220,8 @@ class LocalForecastSource:
             Tuple[str, Dict[str, str]]: The run ID (YYYYMMDDHHMM, UTC) and its parameter file URLs.
         """
         now = datetime.now(timezone.utc)
-        if self.run_id is not None and self.run_checked_at and now - self.run_checked_at < RUN_LOOKUP_MAX_AGE:
-            return self.run_id, self.run_file_urls
+        if self._run_id is not None and self._run_checked_at and now - self._run_checked_at < RUN_LOOKUP_MAX_AGE:
+            return self._run_id, self._run_file_urls
 
         # Items are named by UTC day. Until the first run of a day lands, a few minutes after
         # 00:00 UTC, the newest run is in yesterday's item
@@ -230,10 +230,10 @@ class LocalForecastSource:
             file_urls_by_run = self._fetch_file_urls_by_run(day)
             if file_urls_by_run:
                 # Run IDs are fixed width, so the newest run is the largest string
-                self.run_id = max(file_urls_by_run)
-                self.run_file_urls = file_urls_by_run[self.run_id]
-                self.run_checked_at = now
-                return self.run_id, self.run_file_urls
+                self._run_id = max(file_urls_by_run)
+                self._run_file_urls = file_urls_by_run[self._run_id]
+                self._run_checked_at = now
+                return self._run_id, self._run_file_urls
 
         raise RuntimeError(
             "The MeteoSwiss local forecasting collection published no run for today or yesterday"
