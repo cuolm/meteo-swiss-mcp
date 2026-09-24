@@ -220,7 +220,7 @@ class LocalForecastSource:
             Tuple[str, Dict[str, str]]: The run ID (YYYYMMDDHHMM, UTC) and its parameter file URLs.
         """
         now = datetime.now(timezone.utc)
-        if self.run_checked_at and now - self.run_checked_at < RUN_LOOKUP_MAX_AGE:
+        if self.run_id is not None and self.run_checked_at and now - self.run_checked_at < RUN_LOOKUP_MAX_AGE:
             return self.run_id, self.run_file_urls
 
         # Items are named by UTC day. Until the first run of a day lands, a few minutes after
