@@ -52,9 +52,9 @@ class ForecastSeries(NamedTuple):
 
 def _rank_point(point: ForecastPoint) -> Tuple[bool, str, int]:
     """
-    Rank a point among points with the same name, lower is better: postal code centres before
-    stations, then the lowest postal code, which is the historic centre of a city, then the
-    lowest point id.
+    Sort key that picks one point when several share a name, so a name always gives the same
+    point: postal code points before stations and points of interest, then the lowest postal
+    code, then the lowest point id. It is a fixed order, not a judgement of which point fits best.
     """
     return (not point.postal_code, point.postal_code, int(point.point_id))
 
