@@ -98,7 +98,7 @@ class SwissWeatherPredictions:
             stamp = _find_closing_stamp(when)
         if stamp not in series.values:
             raise ValueError(
-                f"{_format_swiss_time(when)} is outside the forecast for {point.label}. "
+                f"{_format_swiss_time(when)} is outside the forecast for {point.display_name}. "
                 f"{_describe_covered_range(series, parameter)}"
             )
         return series.values[stamp]
@@ -118,14 +118,14 @@ class SwissWeatherPredictions:
 
         if not hours_counted:
             raise ValueError(
-                f"{_format_swiss_time(start)} to {_format_swiss_time(end)} is outside the forecast for {point.label}. "
+                f"{_format_swiss_time(start)} to {_format_swiss_time(end)} is outside the forecast for {point.display_name}. "
                 f"{_describe_covered_range(series, parameter)}"
             )
         return total
 
     def _build_answer(self, value: Any, unit: str, point: Point, run_time: datetime, **fields: Any) -> Dict[str, Any]:
         """Build a tool answer: the value and unit, the resolved point, extra fields and the model run."""
-        answer = {"value": value, "unit": unit, "location": point.label, "altitude_m": point.altitude_m}
+        answer = {"value": value, "unit": unit, "location": point.display_name, "altitude_m": point.altitude_m}
         answer.update(fields)
         answer["model_run"] = _format_swiss_time(run_time)
         return answer
@@ -221,7 +221,7 @@ class SwissWeatherPredictions:
         try:
             return await self._read_series(parameter, point)
         except ValueError as error:
-            logger.info(f"daily_forecast: no {parameter} for {point.label}: {error}")
+            logger.info(f"daily_forecast: no {parameter} for {point.display_name}: {error}")
             return None
 
     async def daily_forecast_for_location(self, location: str, day: date) -> Dict[str, Any]:
@@ -242,7 +242,7 @@ class SwissWeatherPredictions:
         day_stamp = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
 
         summary: Dict[str, Any] = {
-            "location": point.label,
+            "location": point.display_name,
             "altitude_m": point.altitude_m,
             "date": day.isoformat(),
         }
@@ -257,7 +257,7 @@ class SwissWeatherPredictions:
 
         values = [summary[field] for field, _ in DAILY_PARAMETERS]
         if all(value is None for value in values):
-            raise ValueError(f"MeteoSwiss has no daily forecast for {point.label} on {day.isoformat()}.")
+            raise ValueError(f"MeteoSwiss has no daily forecast for {point.display_name} on {day.isoformat()}.")
 
         # The pictogram is published as a code, which is only useful once it is spelled out
         if summary["weather"] is not None:
