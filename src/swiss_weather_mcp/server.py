@@ -59,12 +59,12 @@ def _parse_swiss_time(timestamp: str) -> datetime:
         datetime: The same instant, timezone aware.
     """
     try:
-        parsed = datetime.fromisoformat(timestamp)
+        moment = datetime.fromisoformat(timestamp)
     except ValueError as error:
         raise ValueError(
             f"'{timestamp}' is not a valid timestamp, use for example '2026-09-23T14:00' or '2026-09-23'"
         ) from error
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=SWISS_TZ)
+    return moment if moment.tzinfo else moment.replace(tzinfo=SWISS_TZ)
 
 
 def _handle_tool_call(tool: Callable[..., Awaitable[Dict[str, Any]]]) -> Callable[..., Awaitable[Dict[str, Any]]]:
@@ -85,7 +85,7 @@ def _handle_tool_call(tool: Callable[..., Awaitable[Dict[str, Any]]]) -> Callabl
     @functools.wraps(tool)
     async def run_tool(**arguments: Any) -> Dict[str, Any]:
         try:
-            result = await tool(**arguments)
+            answer = await tool(**arguments)
         except ValueError as error:
             logger.warning(f"{tool.__name__}: {error}")
             raise ToolError(str(error)) from error
@@ -93,8 +93,8 @@ def _handle_tool_call(tool: Callable[..., Awaitable[Dict[str, Any]]]) -> Callabl
             logger.warning(f"{tool.__name__}: could not reach MeteoSwiss: {error}")
             raise ToolError(f"Could not reach MeteoSwiss, try again later: {error}") from error
 
-        logger.info(f"{tool.__name__}: {arguments} -> {result}")
-        return result
+        logger.info(f"{tool.__name__}: {arguments} -> {answer}")
+        return answer
 
     return run_tool
 
