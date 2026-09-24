@@ -215,7 +215,8 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 > **Note:** A location must be one of the places MeteoSwiss publishes. Names are matched exactly,
 > ignoring case and accents, so `zurich` finds `Zürich` but a region such as `Tessin` does not match
 > and is rejected rather than guessed at. A city covers several postal code areas and resolves to the
-> lowest one, its historic centre, which is why the answer names the point it used.
+> lowest one, which is not always its centre (Bern's lowest is 3004, its old town 3011). The answer
+> names the point it used, and a postal code picks a specific district.
 
 > **Note:** `daily_forecast` is by far the cheapest tool, about 8 MB against about 31 MB per hourly
 > parameter, so prefer it when the question is about a day rather than an hour. `total_cloud_cover`
