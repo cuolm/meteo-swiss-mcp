@@ -137,7 +137,8 @@ class LocalForecast:
         """Return the cached point table, downloading it when it is missing or stale."""
         point_table = self.cache_dir / "ogd-local-forecasting_meta_point.csv"
         if point_table.exists():
-            age = datetime.now(timezone.utc) - datetime.fromtimestamp(point_table.stat().st_mtime, timezone.utc)
+            modified_at = datetime.fromtimestamp(point_table.stat().st_mtime, timezone.utc)
+            age = datetime.now(timezone.utc) - modified_at
             if age < POINT_TABLE_MAX_AGE:
                 return point_table
 
@@ -150,7 +151,8 @@ class LocalForecast:
         if self.points:
             return self.points
 
-        with open(self._ensure_point_table(), newline="", encoding="latin-1") as file:
+        point_table = self._ensure_point_table()
+        with open(point_table, newline="", encoding="latin-1") as file:
             for row in csv.DictReader(file, delimiter=";"):
                 self.points.append(Point(
                     point_id=row["point_id"],
@@ -315,7 +317,8 @@ class LocalForecast:
             logger.warning(f"Run {run_id} does not publish '{parameter}', it has: {', '.join(sorted(file_urls))}")
             raise ValueError(f"MeteoSwiss's newest forecast does not include '{parameter}'.")
 
-        values = self._read_point_values(self._ensure_parameter_file(parameter, point, run_id, file_urls[parameter]), point)
+        parameter_file = self._ensure_parameter_file(parameter, point, run_id, file_urls[parameter])
+        values = self._read_point_values(parameter_file, point)
         if not values:
             raise ValueError(
                 f"MeteoSwiss publishes no '{parameter}' values for {point.label}. Some entries, "

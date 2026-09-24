@@ -174,9 +174,11 @@ class SwissWeatherPredictions:
     async def weather_description_for_location(self, location: str, when: datetime) -> Dict[str, Any]:
         point = await self._find_point(location)
         series = await self._read_series(parameters.WEATHER_PICTOGRAM, point)
-        pictogram_code = int(self._read_value_at(series, when, point, parameters.WEATHER_PICTOGRAM))
+        pictogram_value = self._read_value_at(series, when, point, parameters.WEATHER_PICTOGRAM)
+        pictogram_code = int(pictogram_value)
+        description = _describe_pictogram(pictogram_code)
         return self._build_answer(
-            _describe_pictogram(pictogram_code), "description", point, series.run_time,
+            description, "description", point, series.run_time,
             valid_at=_format_swiss_time(when), pictogram_code=pictogram_code,
         )
 

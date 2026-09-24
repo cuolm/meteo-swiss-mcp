@@ -157,9 +157,8 @@ class SwissWeatherMCPServer:
                 daily_forecast("Zurich", "2026-09-23")
                 daily_forecast("8001", "2026-09-25")
             """
-            return await self.predictions.daily_forecast_for_location(
-                location, _parse_swiss_time(date).astimezone(SWISS_TZ).date()
-            )
+            day = _parse_swiss_time(date).astimezone(SWISS_TZ).date()
+            return await self.predictions.daily_forecast_for_location(location, day)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -182,7 +181,8 @@ class SwissWeatherMCPServer:
                 weather_description("Zurich", "2026-09-23T14:00")
                 weather_description("Davos", "2026-09-24T08:00")
             """
-            return await self.predictions.weather_description_for_location(location, _parse_swiss_time(when))
+            moment = _parse_swiss_time(when)
+            return await self.predictions.weather_description_for_location(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -205,7 +205,8 @@ class SwissWeatherMCPServer:
                 temperature("Zurich", "2026-09-23T14:00")
                 temperature("Zermatt", "2026-09-25T07:00")
             """
-            return await self.predictions.temperature_for_location(location, _parse_swiss_time(when))
+            moment = _parse_swiss_time(when)
+            return await self.predictions.temperature_for_location(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -231,9 +232,9 @@ class SwissWeatherMCPServer:
                 total_rainfall("Zurich", "2026-09-23T00:00", "2026-09-24T00:00")   # the whole day
                 total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T12:00")   # the morning
             """
-            return await self.predictions.total_rainfall_for_location(
-                location, _parse_swiss_time(start), _parse_swiss_time(end)
-            )
+            start_moment = _parse_swiss_time(start)
+            end_moment = _parse_swiss_time(end)
+            return await self.predictions.total_rainfall_for_location(location, start_moment, end_moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -257,9 +258,9 @@ class SwissWeatherMCPServer:
                 sunshine_hours("Zurich", "2026-09-23T00:00", "2026-09-24T00:00")   # the whole day
                 sunshine_hours("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")   # the afternoon
             """
-            return await self.predictions.sunshine_hours_for_location(
-                location, _parse_swiss_time(start), _parse_swiss_time(end)
-            )
+            start_moment = _parse_swiss_time(start)
+            end_moment = _parse_swiss_time(end)
+            return await self.predictions.sunshine_hours_for_location(location, start_moment, end_moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -282,7 +283,8 @@ class SwissWeatherMCPServer:
                 precipitation_probability("Zurich", "2026-09-23T14:00")
                 precipitation_probability("Lugano", "2026-09-24T18:00")
             """
-            return await self.predictions.precipitation_probability_for_location(location, _parse_swiss_time(when))
+            moment = _parse_swiss_time(when)
+            return await self.predictions.precipitation_probability_for_location(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -306,7 +308,8 @@ class SwissWeatherMCPServer:
                 precipitation_rate("Zurich", "2026-09-23T14:00")
                 precipitation_rate("Lugano", "2026-09-24T18:00")
             """
-            return await self.predictions.precipitation_rate_for_location(location, _parse_swiss_time(when))
+            moment = _parse_swiss_time(when)
+            return await self.predictions.precipitation_rate_for_location(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -329,7 +332,8 @@ class SwissWeatherMCPServer:
                 wind_speed("Zurich", "2026-09-23T14:00")
                 wind_speed("Säntis", "2026-09-24T12:00")
             """
-            return await self.predictions.wind_speed_for_location(location, _parse_swiss_time(when))
+            moment = _parse_swiss_time(when)
+            return await self.predictions.wind_speed_for_location(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -352,7 +356,8 @@ class SwissWeatherMCPServer:
                 wind_gusts("Zurich", "2026-09-23T14:00")
                 wind_gusts("Jungfraujoch", "2026-09-24T12:00")
             """
-            return await self.predictions.wind_gusts_for_location(location, _parse_swiss_time(when))
+            moment = _parse_swiss_time(when)
+            return await self.predictions.wind_gusts_for_location(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -375,7 +380,8 @@ class SwissWeatherMCPServer:
                 wind_direction("Zurich", "2026-09-23T14:00")
                 wind_direction("Altdorf", "2026-09-24T12:00")
             """
-            return await self.predictions.wind_direction_for_location(location, _parse_swiss_time(when))
+            moment = _parse_swiss_time(when)
+            return await self.predictions.wind_direction_for_location(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -403,7 +409,8 @@ class SwissWeatherMCPServer:
                 total_cloud_cover("Zurich", "2026-09-23T14:00")
                 total_cloud_cover("Locarno", "2026-09-24T09:00")
             """
-            return await self.predictions.total_cloud_cover_for_location(location, _parse_swiss_time(when))
+            moment = _parse_swiss_time(when)
+            return await self.predictions.total_cloud_cover_for_location(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -426,7 +433,8 @@ class SwissWeatherMCPServer:
                 freezing_level("Zermatt", "2026-09-23T14:00")
                 freezing_level("Davos", "2026-09-25T06:00")
             """
-            return await self.predictions.freezing_level_for_location(location, _parse_swiss_time(when))
+            moment = _parse_swiss_time(when)
+            return await self.predictions.freezing_level_for_location(location, moment)
 
     def run(self):
         if self.transport == "stdio":
