@@ -306,8 +306,6 @@ class LocalForecast:
         """
         run_id, file_urls = self.find_latest_run()
         if parameter not in file_urls:
-            # The run and the codes help debugging, the model cannot use them
-            logger.warning(f"Run {run_id} does not publish '{parameter}', it has: {', '.join(sorted(file_urls))}")
             raise ValueError(f"MeteoSwiss's newest forecast does not include '{parameter}'.")
 
         parameter_file = self._ensure_parameter_file(parameter, point, run_id, file_urls[parameter])
