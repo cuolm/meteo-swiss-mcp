@@ -443,11 +443,9 @@ class SwissWeatherMCPServer:
         if self.transport == "stdio":
             logger.info("Running server with stdio transport")
             self.mcp.run(transport="stdio")
-        elif self.transport == "streamable-http":
+        else:
             logger.info("Running server with Streamable HTTP transport")
             self.mcp.run(transport="streamable-http", host=self.host, port=self.port, stateless_http=True)
-        else:
-            raise ValueError(f"Unknown transport: {self.transport}")
 
 
 def main():
