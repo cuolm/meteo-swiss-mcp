@@ -33,7 +33,7 @@ swiss-weather-mcp/
 │   ├── meteoswiss.py       # MeteoSwiss data source, caching and location lookup
 │   ├── parameters.py       # MeteoSwiss parameter codes and pictogram meanings
 │   └── client.py           # MCP client (optional)
-├── tests/swiss_weather_mcp/  # Pytest suite
+├── tests/swiss_weather_mcp/  # Tests
 ├── .github/workflows/      # CI and release pipelines
 ├── docs/                   # Documentation
 ├── pyproject.toml          # Project metadata and dependencies
@@ -259,7 +259,7 @@ Configure the mcp.json file in LMStudio. Replace `<path-to-the-project>` with yo
 ![LMStudioMCPServer](docs/LMStudioMCPServer.png)
 
 ## Tests
-Run the test suite from the project root with:
+Run the tests from the project root with:
 ```bash
 uv run pytest
 
@@ -267,7 +267,14 @@ uv run pytest
 pytest
 ```
 
-Every push and pull request runs the suite plus a Docker build check via the [Tests workflow](.github/workflows/tests.yaml).
+Check the code style with ruff and the type hints with mypy. mypy also checks the client, so install its extra first:
+```bash
+uv sync --group dev --extra client
+uv run ruff check
+uv run mypy
+```
+
+Every push and pull request runs the tests, ruff, mypy and a Docker build check via the [Tests workflow](.github/workflows/tests.yaml).
 
 ## Releasing
 
