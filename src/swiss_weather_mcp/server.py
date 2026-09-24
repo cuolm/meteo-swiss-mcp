@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # Override with SWISS_WEATHER_MCP_CACHE_DIR, e.g. to isolate cache location in tests or Docker.
 CACHE_DIR = Path(os.environ.get("SWISS_WEATHER_MCP_CACHE_DIR", user_cache_path("swiss-weather-mcp")))
 
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run MCP Server")
     parser.add_argument(
@@ -46,6 +47,7 @@ def _parse_args() -> argparse.Namespace:
         help="Logging level for the server (default: INFO)",
     )
     return parser.parse_args()
+
 
 def _parse_swiss_time(timestamp: str) -> datetime:
     """
@@ -460,6 +462,7 @@ def main():
     except Exception:
         logger.exception("Fatal error in MCP server")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
