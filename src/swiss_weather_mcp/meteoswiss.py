@@ -151,17 +151,20 @@ class LocalForecastSource:
             return self.points
 
         point_table = self._ensure_point_table()
+        points: List[ForecastPoint] = []
         with open(point_table, newline="", encoding="latin-1") as file:
             for row in csv.DictReader(file, delimiter=";"):
-                self.points.append(ForecastPoint(
+                points.append(ForecastPoint(
                     point_id=row["point_id"],
                     point_type_id=row["point_type_id"],
                     name=row["point_name"],
                     postal_code=row["postal_code"],
                     altitude_m=float(row["point_height_masl"]),
                 ))
-        logger.info(f"Loaded {len(self.points)} forecast locations")
-        return self.points
+        # Published only once complete, so a parallel request never sees part of the table
+        self.points = points
+        logger.info(f"Loaded {len(points)} forecast locations")
+        return points
 
     def find_point(self, location: str) -> ForecastPoint:
         """
