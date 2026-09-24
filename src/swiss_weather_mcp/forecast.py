@@ -211,18 +211,16 @@ class ForecastService:
 
     async def read_total_cloud_cover(self, location: str, moment: datetime) -> Dict[str, Any]:
         point = await self._find_point(location)
-        layers = {}
-        run_time = None
+        layers: Dict[str, float] = {}
         for layer, parameter in CLOUD_LAYERS:
             series = await self._read_series(parameter, point)
             layers[layer] = self._read_value_at(series, moment, point, parameter)
-            run_time = series.run_time
 
         # The layers overlap, so they cannot simply be added. Assuming they are independent, the sky
         # is clear only where all three are clear, which is the standard random overlap estimate.
         clear_sky = (1 - layers["low"]) * (1 - layers["medium"]) * (1 - layers["high"])
         return self._build_answer(
-            round((1 - clear_sky) * 100, 1), "%", point, run_time,
+            round((1 - clear_sky) * 100, 1), "%", point, series.run_time,
             valid_at=_format_swiss_time(moment),
             low_percent=round(layers["low"] * 100, 1),
             medium_percent=round(layers["medium"] * 100, 1),
@@ -269,7 +267,7 @@ class ForecastService:
             summary[field] = series.values.get(day_stamp)
 
         values = [summary[field] for field, _ in DAILY_PARAMETERS]
-        if all(value is None for value in values):
+        if run_time is None or all(value is None for value in values):
             raise ValueError(f"MeteoSwiss has no daily forecast for {point.display_name} on {day.isoformat()}.")
 
         # The pictogram is published as a code, which is only useful once it is spelled out

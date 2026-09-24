@@ -4,13 +4,21 @@ import json
 import logging
 import sys
 from contextlib import AsyncExitStack
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.types import TextContent
 
 try:
     from openai import AsyncOpenAI
+    from openai.types.chat import (
+        ChatCompletionAssistantMessageParam,
+        ChatCompletionFunctionToolParam,
+        ChatCompletionMessage,
+        ChatCompletionMessageFunctionToolCall,
+        ChatCompletionMessageParam,
+    )
 except ModuleNotFoundError as error:
     raise SystemExit(
         "The MCP client needs the OpenAI SDK, which ships in the optional 'client' extra.\n"
@@ -45,7 +53,7 @@ class MCPClient:
         self.exit_stack = AsyncExitStack()
         self.llm_client = AsyncOpenAI(base_url=base_url, api_key="not-needed")  # local servers ignore the key
         self.model = model
-        self.messages: List[Dict[str, Any]] = []
+        self.messages: List[ChatCompletionMessageParam] = []
         self.read_stream: Optional[Any] = None
         self.write_stream: Optional[Any] = None
 
@@ -73,14 +81,19 @@ class MCPClient:
         tool_names = ", ".join(tool.name for tool in tools_result.tools)
         logger.info(f"Connected to server with tools: {tool_names}")
 
-    async def fetch_tool_definitions(self) -> List[Dict[str, Any]]:
-        tools_result = await self.session.list_tools()
+    def _require_session(self) -> ClientSession:
+        if self.session is None:
+            raise RuntimeError("Call connect_to_server() before using the client")
+        return self.session
+
+    async def fetch_tool_definitions(self) -> List[ChatCompletionFunctionToolParam]:
+        tools_result = await self._require_session().list_tools()
         return [
             {
                 "type": "function",
                 "function": {
                     "name": tool.name,
-                    "description": tool.description,
+                    "description": tool.description or "",
                     "parameters": tool.input_schema,
                 }
             }
@@ -91,18 +104,19 @@ class MCPClient:
         logger.info(f"Tool: {tool_name} called with arguments: {arguments_json}")
         try:
             arguments = json.loads(arguments_json or "{}")  # the model writes these as JSON text
-            tool_result = await self.session.call_tool(tool_name, arguments)
-            return tool_result.content[0].text
+            tool_result = await self._require_session().call_tool(tool_name, arguments)
+            texts = [content.text for content in tool_result.content if isinstance(content, TextContent)]
+            return "\n".join(texts)
         except Exception as error:
             logger.error(f"Tool {tool_name} failed: {error}")
             return f"Error calling tool {tool_name}: {error}"
 
-    def _format_assistant_message(self, message: Any) -> Dict[str, Any]:
+    def _format_assistant_message(self, message: ChatCompletionMessage) -> ChatCompletionAssistantMessageParam:
         """
         Standardizes assistant messages into a clean dictionary format.
         Preserves tool_calls while removing internal metadata (images, thinking, etc).
         """
-        formatted_message = {
+        formatted_message: ChatCompletionAssistantMessageParam = {
             "role": "assistant",
             "content": message.content or ""
         }
@@ -119,6 +133,7 @@ class MCPClient:
                     }
                 }
                 for tool_call in message.tool_calls
+                if isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
             ]
 
         return formatted_message
@@ -136,10 +151,13 @@ class MCPClient:
 
             # If no tools were requested, we have the final answer
             if not message.tool_calls:
-                return message.content
+                return message.content or ""
 
             # Process each tool call
             for tool_call in message.tool_calls:
+                # Only function tools are offered, so no other kind of call comes back
+                if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+                    continue
                 tool_result_text = await self.call_tool(tool_call.function.name, tool_call.function.arguments)
                 self.messages.append({
                     "role": "tool",
