@@ -11,7 +11,7 @@ from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
 try:
-    from openai import AsyncOpenAI
+    from openai import APIConnectionError, APIError, AsyncOpenAI
     from openai.types.chat import (
         ChatCompletionAssistantMessageParam,
         ChatCompletionFunctionToolParam,
@@ -190,7 +190,17 @@ async def _run():
                 continue
 
             logger.info(f"Query: {query}")
-            answer = await client.process_query(query)
+            messages_before = len(client.messages)
+            try:
+                answer = await client.process_query(query)
+            except APIConnectionError:
+                logger.error(f"Could not reach the model server at {args.base_url}. Start it first (see the README), then ask again.")
+                del client.messages[messages_before:]  # the question was not answered, so it is not sent again
+                continue
+            except APIError as error:
+                logger.error(f"The model server returned an error: {error}")
+                del client.messages[messages_before:]
+                continue
             logger.info(f"Answer: {answer}")
 
     finally:
