@@ -47,7 +47,7 @@ def setup_logging(log_level: str = "INFO") -> None:
             "urllib3": {  # connection retries
                 "level": "WARNING",
             },
-            "mcp.server": {  # one line per dispatched MCP request
+            "mcp.server": {  # a second line for each tool failure, and HTTP session messages
                 "level": "WARNING",
             },
         },
