@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 # Compass points the wind direction in degrees is reported as, clockwise from north
 COMPASS_POINTS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
                   "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
+COMPASS_SECTOR_DEGREES = 360 / len(COMPASS_POINTS)
 
 # The field each cloud layer fills in the answer, lowest first
 CLOUD_LAYERS = (
@@ -70,8 +71,8 @@ def _describe_pictogram(pictogram_code: int) -> str:
 
 def _find_compass_point(degrees: float) -> str:
     """Find the compass point a bearing falls in, such as "SW" for 217 degrees."""
-    # The 16 points divide the circle into 22.5 degree sectors, so rounding lands on the nearest
-    sector = round(degrees / 22.5) % len(COMPASS_POINTS)
+    # Rounding picks the nearest point, and the modulo turns a bearing just short of 360 back into N
+    sector = round(degrees / COMPASS_SECTOR_DEGREES) % len(COMPASS_POINTS)
     return COMPASS_POINTS[sector]
 
 
