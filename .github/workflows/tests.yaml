@@ -26,6 +26,25 @@ jobs:
       - name: Run Pytest
         run: uv run pytest
 
+  lint-and-types:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Install uv and Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"  # the lowest supported version
+          enable-cache: true
+      - name: Install Dependencies
+        run: uv sync --group dev --extra client  # mypy also checks the client, which imports the OpenAI SDK
+      - name: Run Ruff
+        run: uv run ruff check
+      - name: Run Mypy
+        run: uv run mypy
+
   docker-build-test:
     name: Docker Build Test
     runs-on: ubuntu-latest
