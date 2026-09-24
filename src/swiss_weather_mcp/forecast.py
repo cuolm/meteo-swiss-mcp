@@ -105,8 +105,21 @@ class ForecastService:
 
     def _sum_between(self, series: ForecastSeries, start_moment: datetime, end_moment: datetime, point: ForecastPoint, parameter: str) -> float:
         """Add up the hourly values from start to end."""
+        if end_moment <= start_moment:
+            raise ValueError(
+                f"The end of the period, {_format_swiss_time(end_moment)}, must be after its start, "
+                f"{_format_swiss_time(start_moment)}."
+            )
+
         first_stamp = _find_closing_stamp(start_moment)
         last_stamp = _find_closing_stamp(end_moment)
+        # The first hour of the period is the row stamped one hour after its start
+        first_hour_stamp = first_stamp + timedelta(hours=1)
+        if first_hour_stamp < min(series.values) or last_stamp > max(series.values):
+            raise ValueError(
+                f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)} is not fully covered "
+                f"by the forecast for {point.display_name}. {_describe_covered_range(series, parameter)}"
+            )
 
         total = 0.0
         hours_counted = 0
