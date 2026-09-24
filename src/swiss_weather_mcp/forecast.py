@@ -55,10 +55,10 @@ def _format_swiss_time(moment: datetime) -> str:
     return moment.astimezone(SWISS_TZ).isoformat(timespec="minutes")
 
 
-def _describe_covered_range(series: ForecastSeries, parameter: str) -> str:
+def _describe_covered_range(series: ForecastSeries) -> str:
     """Say which times a series covers, for an error message."""
     return (
-        f"'{parameter}' covers {_format_swiss_time(min(series.values))} to "
+        f"The forecast covers {_format_swiss_time(min(series.values))} to "
         f"{_format_swiss_time(max(series.values))}."
     )
 
@@ -99,11 +99,11 @@ class ForecastService:
         if stamp not in series.values:
             raise ValueError(
                 f"{_format_swiss_time(moment)} is outside the forecast for {point.display_name}. "
-                f"{_describe_covered_range(series, parameter)}"
+                f"{_describe_covered_range(series)}"
             )
         return series.values[stamp]
 
-    def _sum_between(self, series: ForecastSeries, start_moment: datetime, end_moment: datetime, point: ForecastPoint, parameter: str) -> float:
+    def _sum_between(self, series: ForecastSeries, start_moment: datetime, end_moment: datetime, point: ForecastPoint) -> float:
         """Add up the hourly values from start to end."""
         if end_moment <= start_moment:
             raise ValueError(
@@ -118,7 +118,7 @@ class ForecastService:
         if first_hour_stamp < min(series.values) or last_stamp > max(series.values):
             raise ValueError(
                 f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)} is not fully covered "
-                f"by the forecast for {point.display_name}. {_describe_covered_range(series, parameter)}"
+                f"by the forecast for {point.display_name}. {_describe_covered_range(series)}"
             )
 
         total = 0.0
@@ -132,7 +132,7 @@ class ForecastService:
         if not hours_counted:
             raise ValueError(
                 f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)} is outside the forecast for {point.display_name}. "
-                f"{_describe_covered_range(series, parameter)}"
+                f"{_describe_covered_range(series)}"
             )
         return total
 
@@ -198,14 +198,14 @@ class ForecastService:
     async def read_total_rainfall(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
         point = await self._find_point(location)
         series = await self._read_series(parameters.PRECIPITATION, point)
-        rainfall_mm = self._sum_between(series, start_moment, end_moment, point, parameters.PRECIPITATION)
+        rainfall_mm = self._sum_between(series, start_moment, end_moment, point)
         return self._build_answer(round(rainfall_mm, 1), "mm", point, series.run_time,
                             **{"from": _format_swiss_time(start_moment), "to": _format_swiss_time(end_moment)})
 
     async def read_sunshine_hours(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
         point = await self._find_point(location)
         series = await self._read_series(parameters.SUNSHINE, point)
-        sunshine_minutes = self._sum_between(series, start_moment, end_moment, point, parameters.SUNSHINE)
+        sunshine_minutes = self._sum_between(series, start_moment, end_moment, point)
         return self._build_answer(round(sunshine_minutes / 60, 1), "h", point, series.run_time,
                             **{"from": _format_swiss_time(start_moment), "to": _format_swiss_time(end_moment)})
 
