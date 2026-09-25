@@ -84,6 +84,8 @@ jobs:
           enable-cache: true
       - name: Build sdist and wheel
         run: uv build
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ github.ref_name }}  # the pushed tag is the version, whatever other tags share its commit
       - name: Store Artifacts
         uses: actions/upload-artifact@v7
         with:
