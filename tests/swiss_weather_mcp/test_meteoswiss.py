@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 
 from fakes import EARLIER_RUN_ID, RUN_ID, FakeResponse, build_stac_item
-from swiss_weather_mcp.meteoswiss import ForecastPoint, LocalForecastSource
+from swiss_weather_mcp.meteoswiss import ForecastPoint, LocalForecastSource, _normalise_location, _read_other_language_place_name_rows
 
 
 # --- find_point ---
@@ -38,6 +38,11 @@ def test_find_point_unknown_location(source_fixture):
         source_fixture.find_point("Tessin")
 
 
+def test_find_point_other_language_name(source_fixture):
+    # "Zurigo" is the Italian name of Zürich, from other_language_place_names.csv
+    assert source_fixture.find_point("Zurigo").point_id == "800100"
+
+
 def test_find_point_during_loading(mocker, source_fixture):
     # A second request can ask for a place while the first is still reading the table. Ask for
     # Davos just after the first place of the table has been read.
@@ -54,6 +59,20 @@ def test_find_point_during_loading(mocker, source_fixture):
     source_fixture.find_point("Zürich")
 
     assert found_meanwhile[0].point_id == "26"
+
+
+# --- _read_other_language_place_name_rows ---
+
+def test_read_other_language_place_name_rows():
+    rows = _read_other_language_place_name_rows()
+
+    assert len(rows) > 100
+    for row in rows:
+        assert all(row.values()), row
+    other_language_place_names = [_normalise_location(row["other_language_place_name"]) for row in rows]
+    assert len(other_language_place_names) == len(set(other_language_place_names)), "a name points to two places"
+    point_names = {_normalise_location(row["meteoswiss_point_name"]) for row in rows}
+    assert not point_names & set(other_language_place_names), "a name would hide a real point name"
 
 
 # --- find_latest_run ---
