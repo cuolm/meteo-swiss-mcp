@@ -207,23 +207,31 @@ class ForecastService:
         """Read the air temperature for the hour up to a moment."""
         return await self._build_hourly_answer(location, parameters.TEMPERATURE, moment, "°C")
 
-    async def read_wind_speed(self, location: str, moment: datetime) -> Dict[str, Any]:
-        """Read the mean wind speed for the hour up to a moment."""
-        return await self._build_hourly_answer(location, parameters.WIND_SPEED, moment, "km/h")
-
-    async def read_wind_gusts(self, location: str, moment: datetime) -> Dict[str, Any]:
-        """Read the strongest gust in the hour up to a moment."""
-        return await self._build_hourly_answer(location, parameters.WIND_GUSTS, moment, "km/h")
-
     async def read_freezing_level(self, location: str, moment: datetime) -> Dict[str, Any]:
         """Read the height of the 0 °C line at a moment."""
         return await self._build_hourly_answer(location, parameters.FREEZING_LEVEL, moment, "m above sea level")
 
-    async def read_wind_direction(self, location: str, moment: datetime) -> Dict[str, Any]:
-        """Read the mean wind direction for the hour up to a moment, in degrees and as a compass point."""
-        answer = await self._build_hourly_answer(location, parameters.WIND_DIRECTION, moment, "degrees")
-        answer["compass_point"] = _find_compass_point(answer["value"])
-        return answer
+    async def read_wind(self, location: str, moment: datetime) -> Dict[str, Any]:
+        """Read the mean wind speed, the strongest gust and the wind direction for the hour up to a moment."""
+        point = await self._find_point(location)
+        speed_series = await self._read_series(parameters.WIND_SPEED, point)
+        gust_series = await self._read_series(parameters.WIND_GUSTS, point)
+        direction_series = await self._read_series(parameters.WIND_DIRECTION, point)
+
+        speed_kmh = self._read_value_at(speed_series, moment, point, parameters.WIND_SPEED)
+        gusts_kmh = self._read_value_at(gust_series, moment, point, parameters.WIND_GUSTS)
+        direction_degrees = self._read_value_at(direction_series, moment, point, parameters.WIND_DIRECTION)
+        compass_point = _find_compass_point(direction_degrees)
+        return {
+            "speed_kmh": speed_kmh,
+            "gusts_kmh": gusts_kmh,
+            "direction_degrees": direction_degrees,
+            "compass_point": compass_point,
+            "location": point.display_name,
+            "altitude_m": point.altitude_m,
+            "valid_at": _format_swiss_time(moment),
+            "model_run": _format_swiss_time(speed_series.run_time),
+        }
 
     async def read_weather_description(self, location: str, moment: datetime) -> Dict[str, Any]:
         """Describe the weather in words for the 3 hours up to a moment."""

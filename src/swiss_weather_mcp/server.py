@@ -329,75 +329,30 @@ class SwissWeatherMCPServer:
 
         @self.mcp.tool()
         @_handle_tool_call
-        async def wind_speed(location: str, when: str) -> dict:
+        async def wind(location: str, when: str) -> dict:
             """
-            Get the wind speed for a location at a specific time.
+            Get the wind at a location at a specific time: mean speed, strongest gust and direction.
 
-            This is the mean over the hour up to that time. For the strongest gusts use wind_gusts
-            instead, which is what matters for whether the wind is dangerous.
+            The speed is the mean over the hour up to that time, and the gust the strongest
+            one-second gust in that hour, which is what makes wind hazardous. The direction is where
+            the wind blows from, in degrees clockwise from north (0 is a north wind, 180 a south
+            wind) and as a compass point.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
                 when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
-                dict: Wind speed in kilometres per hour, the resolved location with its altitude,
-                    the time it is valid for, and the model run.
+                dict: Wind speed and gust in kilometres per hour, the direction in degrees and as a
+                    compass point such as "SW", the resolved location with its altitude, the time it
+                    is valid for, and the model run.
 
             Examples:
-                wind_speed("Zurich", "2026-09-23T14:00")
-                wind_speed("Säntis", "2026-09-24T12:00")
+                wind("Zurich", "2026-09-23T14:00")
+                wind("Säntis", "2026-09-24T12:00")
             """
             moment = _parse_swiss_time(when)
-            return await self.forecast_service.read_wind_speed(location, moment)
-
-        @self.mcp.tool()
-        @_handle_tool_call
-        async def wind_gusts(location: str, when: str) -> dict:
-            """
-            Get the strongest wind gust expected at a location during one hour.
-
-            This is the peak one second gust within the hour up to that time, which is usually
-            much higher than the mean wind speed and is what makes wind hazardous.
-
-            Args:
-                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
-
-            Returns:
-                dict: Gust speed in kilometres per hour, the resolved location with its altitude,
-                    the time it is valid for, and the model run.
-
-            Examples:
-                wind_gusts("Zurich", "2026-09-23T14:00")
-                wind_gusts("Jungfraujoch", "2026-09-24T12:00")
-            """
-            moment = _parse_swiss_time(when)
-            return await self.forecast_service.read_wind_gusts(location, moment)
-
-        @self.mcp.tool()
-        @_handle_tool_call
-        async def wind_direction(location: str, when: str) -> dict:
-            """
-            Get the direction the wind blows from at a location at a specific time.
-
-            Reported as the mean over the hour up to that time, in degrees clockwise from north, so
-            0 is a north wind and 180 a south wind.
-
-            Args:
-                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
-
-            Returns:
-                dict: Direction in degrees and as a compass point such as "SW", the resolved
-                    location with its altitude, the time it is valid for, and the model run.
-
-            Examples:
-                wind_direction("Zurich", "2026-09-23T14:00")
-                wind_direction("Altdorf", "2026-09-24T12:00")
-            """
-            moment = _parse_swiss_time(when)
-            return await self.forecast_service.read_wind_direction(location, moment)
+            return await self.forecast_service.read_wind(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
