@@ -186,8 +186,7 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 | Tool | Purpose | Example Call |
 |------|---------|--------------|
 | `current_date_and_time()` | Today's weekday and the Swiss time now, in the form the tools accept | `current_date_and_time()` |
-| `daily_forecast(location, date)` | Whole day: lowest and highest hourly temperature, median rainfall with its 10th and 90th percentile, daytime weather in words | `daily_forecast("Zurich", "2026-09-23")` |
-| `weather_outlook(location, days)` | One row per day from today, 1 to 9 days, each like `daily_forecast` | `weather_outlook("Zurich", 7)` |
+| `daily_forecast(location, start_date, days)` | One row per day, 1 to 9 days: lowest and highest hourly temperature, median rainfall with its 10th and 90th percentile, daytime weather in words with an emoji | `daily_forecast("Zurich", "2026-09-26", 2)` |
 | `weather_description(location, when)` | The weather in words for the 3 hours up to that time, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
 | `hourly_forecast(location, start, end)` | Hour by hour, up to 24 hours: temperature (°C), rain chance (%) and the weather in words with an emoji | `hourly_forecast("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")` |
 | `temperature(location, when)` | Air temperature (°C), mean of the hour up to that time, 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
