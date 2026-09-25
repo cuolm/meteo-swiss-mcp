@@ -110,7 +110,7 @@ class SwissWeatherMCPServer:
         self.transport = args.transport
         self.mcp = MCPServer(
             name="swiss_weather_mcp_server",
-            instructions="This MCP server provides hourly weather forecast data for Switzerland for today and the next 8 days.",
+            instructions="This MCP server provides hourly and daily weather forecasts for Switzerland for today and the next 8 days.",
             log_level=args.log_level,  # forwarded to uvicorn, which configures its own loggers
         )
 
@@ -210,8 +210,8 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                start (str): Swiss local time the period starts, ISO 8601 without offset, e.g. "2026-09-23T12:00".
-                end (str): Swiss local time the period ends, at most 48 hours after start.
+                start (str): Swiss local time the period starts, ISO 8601 without offset, e.g. "2026-09-23T12:00". Today or up to 8 days ahead.
+                end (str): Swiss local time the period ends, ISO 8601 without offset, at most 48 hours after start.
 
             Returns:
                 dict: The resolved location with its altitude, one row per 3-hour block (from, to,
@@ -237,7 +237,7 @@ class SwissWeatherMCPServer:
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                start (str): Swiss local time the period starts, ISO 8601 without offset, e.g. "2026-09-23T06:00".
+                start (str): Swiss local time the period starts, ISO 8601 without offset, e.g. "2026-09-23T06:00". Today or up to 8 days ahead.
                 end (str): Swiss local time the period ends, ISO 8601 without offset, e.g. "2026-09-23T18:00".
 
             Returns:
