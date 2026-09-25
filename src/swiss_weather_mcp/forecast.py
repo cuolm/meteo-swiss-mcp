@@ -30,6 +30,9 @@ DAILY_PARAMETERS = (
     ("weather", parameters.WEATHER_PICTOGRAM_DAY),
 )
 
+# MeteoSwiss publishes today and the next 8 days
+MAX_OUTLOOK_DAYS = 9
+
 
 def _find_closing_stamp(moment: datetime) -> datetime:
     """
@@ -74,6 +77,31 @@ def _find_compass_point(degrees: float) -> str:
     # Rounding picks the nearest point, and the modulo turns a bearing just short of 360 back into N
     sector = round(degrees / COMPASS_SECTOR_DEGREES) % len(COMPASS_POINTS)
     return COMPASS_POINTS[sector]
+
+
+def _build_day(series_by_field: Dict[str, Optional[ForecastSeries]], day: date) -> Optional[Dict[str, Any]]:
+    """Build one day's values from the daily series, or return None when none has a value that day."""
+    # A daily row is stamped 00:00 on the Swiss calendar day it describes
+    day_stamp = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+    day_values: Dict[str, Any] = {}
+    for field, series in series_by_field.items():
+        day_values[field] = series.values.get(day_stamp) if series is not None else None
+    if all(value is None for value in day_values.values()):
+        return None
+
+    # The pictogram is published as a code, which is only useful once it is spelled out
+    if day_values["weather"] is not None:
+        day_values["pictogram_code"] = int(day_values["weather"])
+        day_values["weather"] = _describe_pictogram(day_values["pictogram_code"])
+    return day_values
+
+
+def _find_run_time(series_by_field: Dict[str, Optional[ForecastSeries]]) -> Optional[datetime]:
+    """Return the model run of the first published series, or None when none is published."""
+    for series in series_by_field.values():
+        if series is not None:
+            return series.run_time
+    return None
 
 
 class ForecastService:
@@ -246,8 +274,15 @@ class ForecastService:
         try:
             return await self._read_series(parameter, point)
         except ValueError as error:
-            logger.info(f"daily_forecast: no {parameter} for {point.display_name}: {error}")
+            logger.info(f"No daily {parameter} for {point.display_name}: {error}")
             return None
+
+    async def _read_daily_series(self, point: ForecastPoint) -> Dict[str, Optional[ForecastSeries]]:
+        """Read every daily parameter for one point, keyed by answer field; None where it is not published."""
+        series_by_field: Dict[str, Optional[ForecastSeries]] = {}
+        for field, parameter in DAILY_PARAMETERS:
+            series_by_field[field] = await self._read_series_if_published(parameter, point)
+        return series_by_field
 
     async def read_daily_forecast(self, location: str, day: date) -> Dict[str, Any]:
         """
@@ -263,31 +298,55 @@ class ForecastService:
                 MeteoSwiss does not publish for this location are None.
         """
         point = await self._find_point(location)
-        # A daily row is stamped 00:00 on the Swiss calendar day it describes
-        day_stamp = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+        series_by_field = await self._read_daily_series(point)
+        day_values = _build_day(series_by_field, day)
+        run_time = _find_run_time(series_by_field)
+        if day_values is None or run_time is None:
+            raise ValueError(f"MeteoSwiss has no daily forecast for {point.display_name} on {day.isoformat()}.")
 
         summary: Dict[str, Any] = {
             "location": point.display_name,
             "altitude_m": point.altitude_m,
             "date": day.isoformat(),
         }
-        run_time: Optional[datetime] = None
-        for field, parameter in DAILY_PARAMETERS:
-            series = await self._read_series_if_published(parameter, point)
-            if series is None:
-                summary[field] = None
-                continue
-            run_time = series.run_time
-            summary[field] = series.values.get(day_stamp)
-
-        values = [summary[field] for field, _ in DAILY_PARAMETERS]
-        if run_time is None or all(value is None for value in values):
-            raise ValueError(f"MeteoSwiss has no daily forecast for {point.display_name} on {day.isoformat()}.")
-
-        # The pictogram is published as a code, which is only useful once it is spelled out
-        if summary["weather"] is not None:
-            summary["pictogram_code"] = int(summary["weather"])
-            summary["weather"] = _describe_pictogram(summary["pictogram_code"])
-
+        summary.update(day_values)
         summary["model_run"] = _format_swiss_time(run_time)
         return summary
+
+    async def read_weather_outlook(self, location: str, first_day: date, days: int) -> Dict[str, Any]:
+        """
+        Read the whole-day summary for several days in a row, one row per day.
+
+        Parameters:
+            location (str): Location name or postal code.
+            first_day (date): The first Swiss calendar day, usually today.
+            days (int): How many days, from 1 to MAX_OUTLOOK_DAYS.
+
+        Returns:
+            Dict[str, Any]: The resolved point, one row per day with published values (date,
+                weekday and the fields of read_daily_forecast), and the model run.
+        """
+        if not 1 <= days <= MAX_OUTLOOK_DAYS:
+            raise ValueError(f"days must be between 1 and {MAX_OUTLOOK_DAYS}, not {days}.")
+
+        point = await self._find_point(location)
+        series_by_field = await self._read_daily_series(point)
+        rows = []
+        for offset in range(days):
+            day = first_day + timedelta(days=offset)
+            day_values = _build_day(series_by_field, day)
+            if day_values is None:
+                continue
+            row: Dict[str, Any] = {"date": day.isoformat(), "weekday": f"{day:%A}"}
+            row.update(day_values)
+            rows.append(row)
+
+        run_time = _find_run_time(series_by_field)
+        if not rows or run_time is None:
+            raise ValueError(f"MeteoSwiss has no daily forecast for {point.display_name} from {first_day.isoformat()}.")
+        return {
+            "location": point.display_name,
+            "altitude_m": point.altitude_m,
+            "days": rows,
+            "model_run": _format_swiss_time(run_time),
+        }

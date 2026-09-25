@@ -166,6 +166,34 @@ class SwissWeatherMCPServer:
 
         @self.mcp.tool()
         @_handle_tool_call
+        async def weather_outlook(location: str, days: int = 7) -> dict:
+            """
+            Get a day-by-day summary for a location, starting today: the cheapest way to answer
+            "how is the week" or "how is the weekend".
+
+            One row per day, each like daily_forecast: the lowest and highest hourly mean
+            temperature, the day's rainfall as its median with its 10th and 90th percentile, and the
+            daytime weather in words. For one specific day use daily_forecast instead.
+
+            Args:
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                days (int): How many days, counting today, from 1 to 9. Default 7.
+
+            Returns:
+                dict: The resolved location with its altitude, one row per day (date, weekday,
+                    minimum and maximum temperature in Celsius, rainfall in millimetres, weather in
+                    words), and the model run. A value is None when MeteoSwiss does not publish it
+                    for that location.
+
+            Examples:
+                weather_outlook("Zurich")
+                weather_outlook("Lugano", 3)
+            """
+            today = datetime.now(SWISS_TZ).date()
+            return await self.forecast_service.read_weather_outlook(location, today, days)
+
+        @self.mcp.tool()
+        @_handle_tool_call
         async def weather_description(location: str, when: str) -> dict:
             """
             Get the weather in words for a location at a specific time.
