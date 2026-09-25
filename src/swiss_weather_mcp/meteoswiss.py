@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from . import parameters
+
 logger = logging.getLogger(__name__)
 
 COLLECTION_ID = "ch.meteoschweiz.ogd-local-forecasting"
@@ -250,20 +252,25 @@ class LocalForecastSource:
             if self._run_id is not None and self._run_checked_at and now - self._run_checked_at < RUN_LOOKUP_MAX_AGE:
                 return self._run_id, self._run_file_urls
 
-            # Items are named by UTC day. Until the first run of a day lands, a few minutes after
-            # 00:00 UTC, the newest run is in yesterday's item
+            # Items are named by UTC day. MeteoSwiss uploads the files of a run one by one over a few
+            # minutes, so the newest run can be incomplete. Just after 00:00 UTC, the newest complete
+            # run is then in yesterday's item.
             today = now.date()
             for day in (today, today - timedelta(days=1)):
                 file_urls_by_run = self._fetch_file_urls_by_run(day)
-                if file_urls_by_run:
+                complete_run_ids = []
+                for run_id, file_urls in file_urls_by_run.items():
+                    if parameters.ALL_PARAMETERS <= file_urls.keys():
+                        complete_run_ids.append(run_id)
+                if complete_run_ids:
                     # Run IDs are fixed width, so the newest run is the largest string
-                    self._run_id = max(file_urls_by_run)
+                    self._run_id = max(complete_run_ids)
                     self._run_file_urls = file_urls_by_run[self._run_id]
                     self._run_checked_at = now
                     return self._run_id, self._run_file_urls
 
         raise RuntimeError(
-            "The MeteoSwiss local forecasting collection published no run for today or yesterday"
+            "The MeteoSwiss local forecasting collection published no complete run for today or yesterday"
         )
 
     def _drop_superseded_runs(self, current_run_id: str) -> None:

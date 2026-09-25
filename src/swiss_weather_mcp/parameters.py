@@ -41,6 +41,15 @@ PRECIPITATION_DAY_Q10 = "rreq10p0"      # Precipitation; daily total, 10% quanti
 PRECIPITATION_DAY_Q90 = "rreq90p0"      # Precipitation; daily total, 90% quantile [mm]
 WEATHER_PICTOGRAM_DAY = "jp2000d0"      # MeteoSwiss pictogram number, daily value (valid for daytime period) [code]
 
+# Every file the server reads. A run is used only once MeteoSwiss lists all of them.
+ALL_PARAMETERS = {
+    TEMPERATURE, WIND_SPEED, WIND_GUSTS, WIND_DIRECTION, PRECIPITATION_PROBABILITY,
+    PRECIPITATION_3H, PRECIPITATION_Q90, SUNSHINE, FREEZING_LEVEL, CLOUD_COVER_LOW,
+    CLOUD_COVER_MEDIUM, CLOUD_COVER_HIGH, WEATHER_PICTOGRAM,
+    TEMPERATURE_DAY_MIN, TEMPERATURE_DAY_MAX, PRECIPITATION_DAY, PRECIPITATION_DAY_Q10,
+    PRECIPITATION_DAY_Q90, WEATHER_PICTOGRAM_DAY,
+}
+
 # MeteoSwiss pictogram codes, published by jp2000d0 (daily) and jww003i0 (3 hourly). Codes above 100
 # are the night variant of the same weather. Each code has its description, taken from the MeteoSwiss
 # icon reference sheet with its "cloudly" and "intermittant" spellings corrected because these strings

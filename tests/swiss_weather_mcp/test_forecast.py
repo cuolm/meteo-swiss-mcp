@@ -91,7 +91,7 @@ async def test_read_daily_forecast_one_day(service_fixture):
 
 @pytest.mark.asyncio
 async def test_read_daily_forecast_missing_parameter(service_fixture):
-    # Only tre200px is published in this fixture, the other daily parameters are absent
+    # Only tre200px has rows in this fixture, the other daily files have none for Zurich
     answer = await service_fixture.read_daily_forecast("Zurich", date(2026, 9, 23), 1)
     assert answer["days"][0]["rainfall_median_mm"] is None
 
