@@ -16,9 +16,7 @@ SWISS_TZ = ZoneInfo("Europe/Zurich")
 EXPECTED_TOOLS = {
     "current_date_and_time": [],
     "daily_forecast": ["location", "start_date", "days"],
-    "weather_description": ["location", "when"],
     "hourly_forecast": ["location", "start", "end"],
-    "temperature": ["location", "when"],
     "rain_outlook": ["location", "start", "end"],
     "sunshine_hours": ["location", "start", "end"],
     "wind": ["location", "when"],
@@ -26,7 +24,7 @@ EXPECTED_TOOLS = {
     "freezing_level": ["location", "when"],
 }
 
-TEMPERATURE_CALL = {"location": "Zurich", "when": "2026-09-24T14:00"}
+FREEZING_LEVEL_CALL = {"location": "Zurich", "when": "2026-09-24T14:00"}
 
 
 @pytest.fixture
@@ -93,19 +91,19 @@ async def test_register_tools(server_fixture):
 
 @pytest.mark.asyncio
 async def test_handle_tool_call_returns_the_answer(server_fixture):
-    answer = {"value": 19.1, "unit": "°C", "location": "Zürich 8001 (409 m)"}
-    server_fixture.forecast_service.read_temperature.return_value = answer
+    answer = {"value": 3200.0, "unit": "m above sea level", "location": "Zürich 8001 (409 m)"}
+    server_fixture.forecast_service.read_freezing_level.return_value = answer
 
-    tool_result = await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
+    tool_result = await server_fixture.mcp.call_tool("freezing_level", FREEZING_LEVEL_CALL)
     assert json.loads(tool_result.content[0].text) == answer
 
 
 @pytest.mark.asyncio
 async def test_handle_tool_call_value_error(server_fixture, caplog):
-    server_fixture.forecast_service.read_temperature.side_effect = ValueError("Location 'Tessin' is not one of the places")
+    server_fixture.forecast_service.read_freezing_level.side_effect = ValueError("Location 'Tessin' is not one of the places")
 
     with caplog.at_level(logging.INFO), pytest.raises(ToolError, match="Location 'Tessin' is not one of") as raised:
-        await server_fixture.mcp.call_tool("temperature", {"location": "Tessin", "when": "2026-09-24T14:00"})
+        await server_fixture.mcp.call_tool("freezing_level", {"location": "Tessin", "when": "2026-09-24T14:00"})
 
     assert not isinstance(raised.value, UnexpectedToolError)
     for record in caplog.records:
@@ -115,24 +113,24 @@ async def test_handle_tool_call_value_error(server_fixture, caplog):
 @pytest.mark.asyncio
 async def test_handle_tool_call_invalid_timestamp(server_fixture):
     with pytest.raises(ToolError, match="is not a valid timestamp"):
-        await server_fixture.mcp.call_tool("temperature", {"location": "Zurich", "when": "tomorrow"})
+        await server_fixture.mcp.call_tool("freezing_level", {"location": "Zurich", "when": "tomorrow"})
 
 
 @pytest.mark.asyncio
 async def test_handle_tool_call_meteoswiss_unreachable(server_fixture):
-    server_fixture.forecast_service.read_temperature.side_effect = requests.ConnectionError("connection refused")
+    server_fixture.forecast_service.read_freezing_level.side_effect = requests.ConnectionError("connection refused")
 
     with pytest.raises(ToolError, match="Could not reach MeteoSwiss"):
-        await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
+        await server_fixture.mcp.call_tool("freezing_level", FREEZING_LEVEL_CALL)
 
 
 @pytest.mark.asyncio
 async def test_handle_tool_call_unexpected_error(server_fixture):
     # A bug is a crash: the SDK logs the traceback and tells the model nothing about the internals
-    server_fixture.forecast_service.read_temperature.side_effect = KeyError("internal detail")
+    server_fixture.forecast_service.read_freezing_level.side_effect = KeyError("internal detail")
 
     with pytest.raises(UnexpectedToolError) as raised:
-        await server_fixture.mcp.call_tool("temperature", TEMPERATURE_CALL)
+        await server_fixture.mcp.call_tool("freezing_level", FREEZING_LEVEL_CALL)
     assert "internal detail" not in str(raised.value)
 
 

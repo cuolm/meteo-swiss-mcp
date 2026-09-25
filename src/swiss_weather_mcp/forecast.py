@@ -203,10 +203,6 @@ class ForecastService:
         value = self._read_value_at(series, moment, point, parameter)
         return self._build_answer(value, unit, point, series.run_time, valid_at=_format_swiss_time(moment))
 
-    async def read_temperature(self, location: str, moment: datetime) -> Dict[str, Any]:
-        """Read the air temperature for the hour up to a moment."""
-        return await self._build_hourly_answer(location, parameters.TEMPERATURE, moment, "°C")
-
     async def read_freezing_level(self, location: str, moment: datetime) -> Dict[str, Any]:
         """Read the height of the 0 °C line at a moment."""
         return await self._build_hourly_answer(location, parameters.FREEZING_LEVEL, moment, "m above sea level")
@@ -232,18 +228,6 @@ class ForecastService:
             "valid_at": _format_swiss_time(moment),
             "model_run": _format_swiss_time(speed_series.run_time),
         }
-
-    async def read_weather_description(self, location: str, moment: datetime) -> Dict[str, Any]:
-        """Describe the weather in words for the 3 hours up to a moment."""
-        point = await self._find_point(location)
-        series = await self._read_series(parameters.WEATHER_PICTOGRAM, point)
-        pictogram_value = self._read_value_at(series, moment, point, parameters.WEATHER_PICTOGRAM)
-        pictogram_code = int(pictogram_value)
-        description, weather_emoji = _describe_pictogram(pictogram_code)
-        return self._build_answer(
-            description, "description", point, series.run_time,
-            valid_at=_format_swiss_time(moment), pictogram_code=pictogram_code, weather_emoji=weather_emoji,
-        )
 
     async def read_sunshine_hours(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
         """Add up the sunshine over a period, in hours."""
@@ -272,43 +256,59 @@ class ForecastService:
             high_percent=round(layers["high"] * 100, 1),
         )
 
-    async def read_hourly_forecast(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
+    async def read_hourly_forecast(
+        self, location: str, start_moment: datetime, end_moment: Optional[datetime] = None
+    ) -> Dict[str, Any]:
         """
         Read the temperature, rain chance and weather for every hour from start to end.
 
         Parameters:
             location (str): Location name or postal code.
             start_moment (datetime): Start of the period, timezone aware.
-            end_moment (datetime): End of the period, at most MAX_HOURLY_FORECAST after the start.
+            end_moment (Optional[datetime]): End of the period, at most MAX_HOURLY_FORECAST after the
+                start; None for the one hour starting at start.
 
         Returns:
-            Dict[str, Any]: The resolved point, one row per hour, and the model run.
+            Dict[str, Any]: The resolved point, one row per hour labelled with its start and end, and
+                the model run.
         """
-        _check_period_order(start_moment, end_moment)
-        if end_moment - start_moment > MAX_HOURLY_FORECAST:
-            max_hours = int(MAX_HOURLY_FORECAST.total_seconds() // 3600)
-            raise ValueError(f"An hourly forecast covers at most {max_hours} hours; for whole days use daily_forecast.")
+        # A row is stamped at the end of its hour, so the first row is the one closing the hour
+        # that contains the start; an hour ending exactly at the start lies before the period
+        first_stamp = _find_closing_stamp(start_moment)
+        if first_stamp == start_moment:
+            first_stamp += timedelta(hours=1)
+
+        if end_moment is None:
+            last_stamp = first_stamp
+            period = _format_swiss_time(start_moment)
+        else:
+            _check_period_order(start_moment, end_moment)
+            if end_moment - start_moment > MAX_HOURLY_FORECAST:
+                max_hours = int(MAX_HOURLY_FORECAST.total_seconds() // 3600)
+                raise ValueError(f"An hourly forecast covers at most {max_hours} hours; for whole days use daily_forecast.")
+            last_stamp = _find_closing_stamp(end_moment)
+            period = f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)}"
 
         point = await self._find_point(location)
         temperature_series = await self._read_series(parameters.TEMPERATURE, point)
         chance_series = await self._read_series(parameters.PRECIPITATION_PROBABILITY, point)
         pictogram_series = await self._read_series(parameters.WEATHER_PICTOGRAM, point)
+        all_series = (temperature_series, chance_series, pictogram_series)
 
-        stamp = _find_closing_stamp(start_moment)
-        # The hour ending exactly at the start lies before the period
-        if stamp == start_moment:
-            stamp += timedelta(hours=1)
-        last_stamp = _find_closing_stamp(end_moment)
         hours = []
+        stamp = first_stamp
         while stamp <= last_stamp:
-            if any(stamp not in series.values for series in (temperature_series, chance_series, pictogram_series)):
+            has_values = all(stamp in series.values for series in all_series)
+            if not has_values:
                 raise ValueError(
-                    f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)} is not fully covered "
-                    f"by the forecast for {point.display_name}. {_describe_covered_range(pictogram_series)}"
+                    f"{period} is not fully covered by the forecast for {point.display_name}. "
+                    f"{_describe_covered_range(pictogram_series)}"
                 )
-            description, weather_emoji = _describe_pictogram(int(pictogram_series.values[stamp]))
+            pictogram_code = int(pictogram_series.values[stamp])
+            description, weather_emoji = _describe_pictogram(pictogram_code)
             hours.append({
-                "time": _format_swiss_time(stamp),
+                "from": _format_swiss_time(stamp - timedelta(hours=1)),
+                "to": _format_swiss_time(stamp),
                 "temperature_c": temperature_series.values[stamp],
                 "rain_chance_percent": chance_series.values[stamp],
                 "weather": description,
