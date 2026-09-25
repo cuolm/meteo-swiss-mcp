@@ -136,62 +136,34 @@ class SwissWeatherMCPServer:
 
         @self.mcp.tool()
         @_handle_tool_call
-        async def daily_forecast(location: str, date: str) -> dict:
+        async def daily_forecast(location: str, start_date: str, days: int = 1) -> dict:
             """
-            Get the whole-day summary for a location: the cheapest way to answer "how is the weather".
+            Get the whole-day forecast for a location, for one day or several days in a row: the
+            cheapest way to answer "how is the weather" for a day, the weekend or the week.
 
-            Prefer this over several hourly tools when the question is about a day rather than an
-            hour, and always for the rain of a whole day. The values cover a Swiss calendar day,
-            00:00 to 24:00 local time. The minimum and maximum are the lowest and highest hourly
-            mean temperature of that day, and the weather words describe the daytime.
+            Each day covers a Swiss calendar day, 00:00 to 24:00 local time. The minimum and maximum
+            are the lowest and highest hourly mean temperature of that day, and the weather words
+            describe the daytime. Always use this for the rain of a whole day.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                    Must be a place MeteoSwiss publishes forecasts for.
-                date (str): The Swiss calendar day in ISO 8601, e.g. "2026-09-23". Today or up to 8 days ahead.
+                start_date (str): The first Swiss calendar day in ISO 8601, e.g. "2026-09-23". Today or up to 8 days ahead.
+                days (int): How many days in a row, from 1 to 9. Default 1.
 
             Returns:
-                dict: Minimum and maximum temperature in Celsius; the day's rainfall in millimetres
-                    as its median and its 10th and 90th percentile, meaning a 90% chance of at least
-                    the 10th-percentile amount and at most the 90th-percentile amount; a worded
-                    weather summary with a matching emoji, the resolved location with its altitude,
-                    and the model run.
-                    A value is None when MeteoSwiss does not publish it for that location.
+                dict: The resolved location with its altitude, one row per day, and the model run.
+                    Each row has the date and weekday, the minimum and maximum temperature in
+                    Celsius, the day's rainfall in millimetres as its median and its 10th and 90th
+                    percentile (in 8 of 10 possible outcomes, the rain lies between the two
+                    percentiles), and the weather in words with a matching emoji. A value is None
+                    when MeteoSwiss does not publish it for that location.
 
             Examples:
                 daily_forecast("Zurich", "2026-09-23")
-                daily_forecast("8001", "2026-09-25")
+                daily_forecast("Lugano", "2026-09-26", 2)   # a weekend
             """
-            day = _parse_swiss_time(date).astimezone(SWISS_TZ).date()
-            return await self.forecast_service.read_daily_forecast(location, day)
-
-        @self.mcp.tool()
-        @_handle_tool_call
-        async def weather_outlook(location: str, days: int = 7) -> dict:
-            """
-            Get a day-by-day summary for a location, starting today: the cheapest way to answer
-            "how is the week" or "how is the weekend".
-
-            One row per day, each like daily_forecast: the lowest and highest hourly mean
-            temperature, the day's rainfall as its median with its 10th and 90th percentile, and the
-            daytime weather in words. For one specific day use daily_forecast instead.
-
-            Args:
-                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                days (int): How many days, counting today, from 1 to 9. Default 7.
-
-            Returns:
-                dict: The resolved location with its altitude, one row per day (date, weekday,
-                    minimum and maximum temperature in Celsius, rainfall in millimetres, weather in
-                    words with a matching emoji), and the model run. A value is None when MeteoSwiss does not publish it
-                    for that location.
-
-            Examples:
-                weather_outlook("Zurich")
-                weather_outlook("Lugano", 3)
-            """
-            today = datetime.now(SWISS_TZ).date()
-            return await self.forecast_service.read_weather_outlook(location, today, days)
+            first_day = _parse_swiss_time(start_date).astimezone(SWISS_TZ).date()
+            return await self.forecast_service.read_daily_forecast(location, first_day, days)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -228,7 +200,7 @@ class SwissWeatherMCPServer:
             Use this for part of a day, such as "how is the afternoon" or "when is the best time for
             a walk". Each row covers the hour up to its time: the temperature is the mean of that
             hour, the rain chance and the weather cover the 3 hours up to it. For whole days use
-            weather_outlook, for rain amounts rain_outlook.
+            daily_forecast, for rain amounts rain_outlook.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").

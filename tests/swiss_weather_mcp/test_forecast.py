@@ -115,49 +115,42 @@ async def test_read_weather_description(service_fixture):
 # --- read_daily_forecast ---
 
 @pytest.mark.asyncio
-async def test_read_daily_forecast_outside_the_forecast(service_fixture):
-    # Every parameter exists, but none reaches that day, so there is nothing to answer with
-    with pytest.raises(ValueError, match="no daily forecast"):
-        await service_fixture.read_daily_forecast("Zurich", date(2026, 10, 30))
-
-
-@pytest.mark.asyncio
-async def test_read_daily_forecast_missing_parameter(service_fixture):
-    # Only tre200px is published in this fixture, the other daily parameters are absent
-    answer = await service_fixture.read_daily_forecast("Zurich", date(2026, 9, 23))
-
-    assert answer["temperature_max_c"] == 20.6
-    assert answer["rainfall_median_mm"] is None
-    assert answer["location"] == "Zürich 8001 (409 m)"
-    assert answer["date"] == "2026-09-23"
-
-
-# --- read_weather_outlook ---
-
-@pytest.mark.asyncio
-async def test_read_weather_outlook(service_fixture):
+async def test_read_daily_forecast(service_fixture):
     # The fixture publishes daily values for 23 and 24 September only, so 25 September is left out
-    answer = await service_fixture.read_weather_outlook("Zurich", date(2026, 9, 23), 3)
+    answer = await service_fixture.read_daily_forecast("Zurich", date(2026, 9, 23), 3)
 
     assert [day["date"] for day in answer["days"]] == ["2026-09-23", "2026-09-24"]
     assert [day["weekday"] for day in answer["days"]] == ["Wednesday", "Thursday"]
     assert [day["temperature_max_c"] for day in answer["days"]] == [20.6, 18.4]
-    assert answer["days"][0]["rainfall_median_mm"] is None
     assert answer["location"] == "Zürich 8001 (409 m)"
     assert answer["model_run"] == "2026-09-22T15:00+02:00"
 
 
 @pytest.mark.asyncio
-async def test_read_weather_outlook_invalid_days(service_fixture):
-    for days in (0, 10):
-        with pytest.raises(ValueError, match="between 1 and 9"):
-            await service_fixture.read_weather_outlook("Zurich", date(2026, 9, 23), days)
+async def test_read_daily_forecast_one_day(service_fixture):
+    answer = await service_fixture.read_daily_forecast("Zurich", date(2026, 9, 24), 1)
+    assert [day["date"] for day in answer["days"]] == ["2026-09-24"]
 
 
 @pytest.mark.asyncio
-async def test_read_weather_outlook_outside_the_forecast(service_fixture):
+async def test_read_daily_forecast_missing_parameter(service_fixture):
+    # Only tre200px is published in this fixture, the other daily parameters are absent
+    answer = await service_fixture.read_daily_forecast("Zurich", date(2026, 9, 23), 1)
+    assert answer["days"][0]["rainfall_median_mm"] is None
+
+
+@pytest.mark.asyncio
+async def test_read_daily_forecast_invalid_days(service_fixture):
+    for days in (0, 10):
+        with pytest.raises(ValueError, match="between 1 and 9"):
+            await service_fixture.read_daily_forecast("Zurich", date(2026, 9, 23), days)
+
+
+@pytest.mark.asyncio
+async def test_read_daily_forecast_outside_the_forecast(service_fixture):
+    # Every parameter exists, but none reaches these days, so there is nothing to answer with
     with pytest.raises(ValueError, match="no daily forecast"):
-        await service_fixture.read_weather_outlook("Zurich", date(2026, 10, 30), 3)
+        await service_fixture.read_daily_forecast("Zurich", date(2026, 10, 30), 3)
 
 
 # --- read_wind ---

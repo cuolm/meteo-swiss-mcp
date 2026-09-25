@@ -31,7 +31,7 @@ DAILY_PARAMETERS = (
 )
 
 # MeteoSwiss publishes today and the next 8 days
-MAX_OUTLOOK_DAYS = 9
+MAX_DAYS = 9
 
 RAIN_BLOCK = timedelta(hours=3)
 MAX_RAIN_OUTLOOK = timedelta(hours=48)
@@ -287,7 +287,7 @@ class ForecastService:
         _check_period_order(start_moment, end_moment)
         if end_moment - start_moment > MAX_HOURLY_FORECAST:
             max_hours = int(MAX_HOURLY_FORECAST.total_seconds() // 3600)
-            raise ValueError(f"An hourly forecast covers at most {max_hours} hours; for more use weather_outlook.")
+            raise ValueError(f"An hourly forecast covers at most {max_hours} hours; for whole days use daily_forecast.")
 
         point = await self._find_point(location)
         temperature_series = await self._read_series(parameters.TEMPERATURE, point)
@@ -391,50 +391,23 @@ class ForecastService:
             series_by_field[field] = await self._read_series_if_published(parameter, point)
         return series_by_field
 
-    async def read_daily_forecast(self, location: str, day: date) -> Dict[str, Any]:
+    async def read_daily_forecast(self, location: str, first_day: date, days: int) -> Dict[str, Any]:
         """
-        Read the whole-day summary for a location.
+        Read the whole-day forecast for one or several days in a row, one row per day.
 
         Parameters:
             location (str): Location name or postal code.
-            day (date): The Swiss calendar day.
-
-        Returns:
-            Dict[str, Any]: Minimum and maximum temperature, the median rainfall with its 10th and
-                90th percentile, a worded summary, the resolved point and the model run. Fields
-                MeteoSwiss does not publish for this location are None.
-        """
-        point = await self._find_point(location)
-        series_by_field = await self._read_daily_series(point)
-        day_values = _build_day(series_by_field, day)
-        run_time = _find_run_time(series_by_field)
-        if day_values is None or run_time is None:
-            raise ValueError(f"MeteoSwiss has no daily forecast for {point.display_name} on {day.isoformat()}.")
-
-        summary: Dict[str, Any] = {
-            "location": point.display_name,
-            "altitude_m": point.altitude_m,
-            "date": day.isoformat(),
-        }
-        summary.update(day_values)
-        summary["model_run"] = _format_swiss_time(run_time)
-        return summary
-
-    async def read_weather_outlook(self, location: str, first_day: date, days: int) -> Dict[str, Any]:
-        """
-        Read the whole-day summary for several days in a row, one row per day.
-
-        Parameters:
-            location (str): Location name or postal code.
-            first_day (date): The first Swiss calendar day, usually today.
-            days (int): How many days, from 1 to MAX_OUTLOOK_DAYS.
+            first_day (date): The first Swiss calendar day.
+            days (int): How many days, from 1 to MAX_DAYS.
 
         Returns:
             Dict[str, Any]: The resolved point, one row per day with published values (date,
-                weekday and the fields of read_daily_forecast), and the model run.
+                weekday, minimum and maximum temperature, rainfall median and 10th and 90th
+                percentile, weather in words with its emoji), and the model run. Fields MeteoSwiss
+                does not publish for this location are None.
         """
-        if not 1 <= days <= MAX_OUTLOOK_DAYS:
-            raise ValueError(f"days must be between 1 and {MAX_OUTLOOK_DAYS}, not {days}.")
+        if not 1 <= days <= MAX_DAYS:
+            raise ValueError(f"days must be between 1 and {MAX_DAYS}, not {days}.")
 
         point = await self._find_point(location)
         series_by_field = await self._read_daily_series(point)

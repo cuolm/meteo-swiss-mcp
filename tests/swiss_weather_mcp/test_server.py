@@ -15,8 +15,7 @@ SWISS_TZ = ZoneInfo("Europe/Zurich")
 # Every tool the server offers, with its arguments in order
 EXPECTED_TOOLS = {
     "current_date_and_time": [],
-    "daily_forecast": ["location", "date"],
-    "weather_outlook": ["location", "days"],
+    "daily_forecast": ["location", "start_date", "days"],
     "weather_description": ["location", "when"],
     "hourly_forecast": ["location", "start", "end"],
     "temperature": ["location", "when"],
