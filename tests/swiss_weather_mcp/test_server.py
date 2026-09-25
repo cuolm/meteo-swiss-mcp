@@ -22,9 +22,7 @@ EXPECTED_TOOLS = {
     "temperature": ["location", "when"],
     "rain_outlook": ["location", "start", "end"],
     "sunshine_hours": ["location", "start", "end"],
-    "wind_speed": ["location", "when"],
-    "wind_gusts": ["location", "when"],
-    "wind_direction": ["location", "when"],
+    "wind": ["location", "when"],
     "total_cloud_cover": ["location", "when"],
     "freezing_level": ["location", "when"],
 }

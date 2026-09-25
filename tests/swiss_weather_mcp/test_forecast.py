@@ -160,6 +160,19 @@ async def test_read_weather_outlook_outside_the_forecast(service_fixture):
         await service_fixture.read_weather_outlook("Zurich", date(2026, 10, 30), 3)
 
 
+# --- read_wind ---
+
+@pytest.mark.asyncio
+async def test_read_wind(service_fixture):
+    # 14:00 Swiss is the hour ending at 12:00 UTC
+    answer = await service_fixture.read_wind("Zurich", build_swiss_time("2026-09-23T14:00"))
+
+    assert (answer["speed_kmh"], answer["gusts_kmh"]) == (12.5, 38.0)
+    assert (answer["direction_degrees"], answer["compass_point"]) == (217.0, "SW")
+    assert answer["valid_at"] == "2026-09-23T14:00+02:00"
+    assert answer["location"] == "Zürich 8001 (409 m)"
+
+
 # --- read_hourly_forecast ---
 
 @pytest.mark.asyncio
