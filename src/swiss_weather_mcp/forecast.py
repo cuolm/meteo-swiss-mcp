@@ -210,9 +210,11 @@ class ForecastService:
     async def read_wind(self, location: str, moment: datetime) -> Dict[str, Any]:
         """Read the mean wind speed, the strongest gust and the wind direction for the hour up to a moment."""
         point = await self._find_point(location)
-        speed_series = await self._read_series(parameters.WIND_SPEED, point)
-        gust_series = await self._read_series(parameters.WIND_GUSTS, point)
-        direction_series = await self._read_series(parameters.WIND_DIRECTION, point)
+        speed_series, gust_series, direction_series = await asyncio.gather(
+            self._read_series(parameters.WIND_SPEED, point),
+            self._read_series(parameters.WIND_GUSTS, point),
+            self._read_series(parameters.WIND_DIRECTION, point),
+        )
 
         speed_kmh = self._read_value_at(speed_series, moment, point, parameters.WIND_SPEED)
         gusts_kmh = self._read_value_at(gust_series, moment, point, parameters.WIND_GUSTS)
@@ -240,9 +242,10 @@ class ForecastService:
     async def read_total_cloud_cover(self, location: str, moment: datetime) -> Dict[str, Any]:
         """Estimate the total cloud cover at a moment from the three overlapping layers."""
         point = await self._find_point(location)
+        series_reads = [self._read_series(parameter, point) for _, parameter in CLOUD_LAYERS]
+        all_series = await asyncio.gather(*series_reads)
         layers: Dict[str, float] = {}
-        for layer, parameter in CLOUD_LAYERS:
-            series = await self._read_series(parameter, point)
+        for (layer, parameter), series in zip(CLOUD_LAYERS, all_series):
             layers[layer] = self._read_value_at(series, moment, point, parameter)
 
         # The layers overlap, so they cannot simply be added. Assuming they are independent, the sky
@@ -290,9 +293,11 @@ class ForecastService:
             period = f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)}"
 
         point = await self._find_point(location)
-        temperature_series = await self._read_series(parameters.TEMPERATURE, point)
-        chance_series = await self._read_series(parameters.PRECIPITATION_PROBABILITY, point)
-        pictogram_series = await self._read_series(parameters.WEATHER_PICTOGRAM, point)
+        temperature_series, chance_series, pictogram_series = await asyncio.gather(
+            self._read_series(parameters.TEMPERATURE, point),
+            self._read_series(parameters.PRECIPITATION_PROBABILITY, point),
+            self._read_series(parameters.WEATHER_PICTOGRAM, point),
+        )
         all_series = (temperature_series, chance_series, pictogram_series)
 
         hours = []
@@ -342,9 +347,11 @@ class ForecastService:
             raise ValueError(f"A rain outlook covers at most {max_hours} hours; ask for a shorter period.")
 
         point = await self._find_point(location)
-        chance_series = await self._read_series(parameters.PRECIPITATION_PROBABILITY, point)
-        median_series = await self._read_series(parameters.PRECIPITATION_3H, point)
-        upper_series = await self._read_series(parameters.PRECIPITATION_Q90, point)
+        chance_series, median_series, upper_series = await asyncio.gather(
+            self._read_series(parameters.PRECIPITATION_PROBABILITY, point),
+            self._read_series(parameters.PRECIPITATION_3H, point),
+            self._read_series(parameters.PRECIPITATION_Q90, point),
+        )
 
         blocks = []
         block_start = _find_closing_stamp(start_moment)
@@ -386,9 +393,11 @@ class ForecastService:
 
     async def _read_daily_series(self, point: ForecastPoint) -> Dict[str, Optional[ForecastSeries]]:
         """Read every daily parameter for one point, keyed by answer field; None where it is not published."""
+        series_reads = [self._read_series_if_published(parameter, point) for _, parameter in DAILY_PARAMETERS]
+        all_series = await asyncio.gather(*series_reads)
         series_by_field: Dict[str, Optional[ForecastSeries]] = {}
-        for field, parameter in DAILY_PARAMETERS:
-            series_by_field[field] = await self._read_series_if_published(parameter, point)
+        for (field, _), series in zip(DAILY_PARAMETERS, all_series):
+            series_by_field[field] = series
         return series_by_field
 
     async def read_daily_forecast(self, location: str, first_day: date, days: int) -> Dict[str, Any]:

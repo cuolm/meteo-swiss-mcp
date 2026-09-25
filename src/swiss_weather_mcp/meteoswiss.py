@@ -2,6 +2,7 @@ import csv
 import logging
 from importlib import resources
 import shutil
+import threading
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -152,6 +153,8 @@ class LocalForecastSource:
         self._run_id: Optional[str] = None
         self._run_file_urls: Dict[str, str] = {}
         self._run_checked_at: Optional[datetime] = None
+        # A tool reads its files in parallel, and all of them must come from the same run
+        self._run_lookup_lock = threading.Lock()
 
     def _ensure_point_table(self) -> Path:
         """Return the cached point table, downloading it when it is missing or stale."""
@@ -242,21 +245,22 @@ class LocalForecastSource:
         Returns:
             Tuple[str, Dict[str, str]]: The run ID (YYYYMMDDHHMM, UTC) and its parameter file URLs.
         """
-        now = datetime.now(timezone.utc)
-        if self._run_id is not None and self._run_checked_at and now - self._run_checked_at < RUN_LOOKUP_MAX_AGE:
-            return self._run_id, self._run_file_urls
-
-        # Items are named by UTC day. Until the first run of a day lands, a few minutes after
-        # 00:00 UTC, the newest run is in yesterday's item
-        today = now.date()
-        for day in (today, today - timedelta(days=1)):
-            file_urls_by_run = self._fetch_file_urls_by_run(day)
-            if file_urls_by_run:
-                # Run IDs are fixed width, so the newest run is the largest string
-                self._run_id = max(file_urls_by_run)
-                self._run_file_urls = file_urls_by_run[self._run_id]
-                self._run_checked_at = now
+        with self._run_lookup_lock:
+            now = datetime.now(timezone.utc)
+            if self._run_id is not None and self._run_checked_at and now - self._run_checked_at < RUN_LOOKUP_MAX_AGE:
                 return self._run_id, self._run_file_urls
+
+            # Items are named by UTC day. Until the first run of a day lands, a few minutes after
+            # 00:00 UTC, the newest run is in yesterday's item
+            today = now.date()
+            for day in (today, today - timedelta(days=1)):
+                file_urls_by_run = self._fetch_file_urls_by_run(day)
+                if file_urls_by_run:
+                    # Run IDs are fixed width, so the newest run is the largest string
+                    self._run_id = max(file_urls_by_run)
+                    self._run_file_urls = file_urls_by_run[self._run_id]
+                    self._run_checked_at = now
+                    return self._run_id, self._run_file_urls
 
         raise RuntimeError(
             "The MeteoSwiss local forecasting collection published no run for today or yesterday"

@@ -1,3 +1,4 @@
+import threading
 from datetime import date
 
 import pytest
@@ -233,6 +234,35 @@ async def test_read_rain_outlook_reversed_period(service_fixture):
         await service_fixture.read_rain_outlook(
             "Zurich", build_swiss_time("2026-09-23T20:00"), build_swiss_time("2026-09-23T14:00")
         )
+
+
+
+# --- parallel reads ---
+
+# How long a read waits for the other reads of its tool to start
+PARALLEL_READ_TIMEOUT_SECONDS = 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method_name, arguments, file_count", [
+    ("read_wind", ("Zurich", build_swiss_time("2026-09-23T14:00")), 3),
+    ("read_total_cloud_cover", ("Zurich", build_swiss_time("2026-09-23T14:00")), 3),
+    ("read_hourly_forecast", ("Zurich", build_swiss_time("2026-09-23T13:00")), 3),
+    ("read_rain_outlook", ("Zurich", build_swiss_time("2026-09-23T14:00"), build_swiss_time("2026-09-23T20:00")), 3),
+    ("read_daily_forecast", ("Zurich", date(2026, 9, 23), 1), 6),
+])
+async def test_read_files_in_parallel(mocker, service_fixture, method_name, arguments, file_count):
+    # Each read waits until all reads of the tool have started, so reads one after the other time out
+    all_reads_started = threading.Barrier(file_count, timeout=PARALLEL_READ_TIMEOUT_SECONDS)
+    read_series = service_fixture.forecast_source.read_series
+
+    def wait_for_the_other_reads(parameter, point):
+        all_reads_started.wait()
+        return read_series(parameter, point)
+
+    mocker.patch.object(service_fixture.forecast_source, "read_series", side_effect=wait_for_the_other_reads)
+    read_forecast = getattr(service_fixture, method_name)
+    await read_forecast(*arguments)
 
 
 # --- _describe_pictogram ---

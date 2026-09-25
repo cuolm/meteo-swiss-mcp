@@ -1,3 +1,5 @@
+import threading
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -107,6 +109,26 @@ def test_find_latest_run_uses_the_utc_day(mocker, tmp_path):
     LocalForecastSource(tmp_path).find_latest_run()
     requested_url = get_mock.call_args_list[0].args[0]
     assert requested_url.endswith("/items/20260923-ch")
+
+
+def test_find_latest_run_once_for_parallel_reads(mocker, tmp_path):
+    # The reads of one tool run at the same time; a slow catalogue gives them time to overlap
+    catalogue_delay_seconds = 0.2
+    parallel_reads = 3
+
+    def answer_slowly(url, **kwargs):
+        time.sleep(catalogue_delay_seconds)
+        return FakeResponse(payload=build_stac_item(RUN_ID, ["tre200h0"]))
+
+    get_mock = mocker.patch("swiss_weather_mcp.meteoswiss.requests.get", side_effect=answer_slowly)
+    forecast_source = LocalForecastSource(tmp_path)
+    threads = [threading.Thread(target=forecast_source.find_latest_run) for _ in range(parallel_reads)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert get_mock.call_count == 1
 
 
 # --- read_series ---
