@@ -218,7 +218,8 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 
 > **Note:** `daily_forecast` is by far the cheapest tool, about 8 MB against about 31 MB per hourly
 > parameter, so prefer it when the question is about a day rather than an hour. `hourly_forecast`,
-> `rain_outlook`, `wind` and `total_cloud_cover` each read three hourly files.
+> `rain_outlook`, `wind` and `total_cloud_cover` each read three hourly files, and download them at
+> the same time.
 
 > **Note:** MeteoSwiss calculates many slightly different possible outcomes, not just one forecast.
 > Temperature and rain are the median of these outcomes: half lie below it and half above. If the
