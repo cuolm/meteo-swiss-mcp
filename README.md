@@ -191,11 +191,8 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 | `weather_description(location, when)` | The weather in words for the 3 hours up to that time, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
 | `hourly_forecast(location, start, end)` | Hour by hour, up to 24 hours: temperature (°C), rain chance (%) and the weather in words with an emoji | `hourly_forecast("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")` |
 | `temperature(location, when)` | Air temperature (°C), mean of the hour up to that time, 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
-| `total_rainfall(location, start, end)` | Median rainfall (mm) of each hour, summed over a period | `total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
 | `rain_outlook(location, start, end)` | Rain in 3-hour blocks, up to 48 hours: chance (%), median (mm) and how much the wettest hour may bring (mm) | `rain_outlook("Zurich", "2026-09-23T12:00", "2026-09-24T00:00")` |
 | `sunshine_hours(location, start, end)` | Sunshine (h) summed over a period | `sunshine_hours("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
-| `precipitation_probability(location, when)` | Chance of rain (%) over the 3 hours up to that time | `precipitation_probability("Zurich", "2026-09-23T14:00")` |
-| `precipitation_rate(location, when)` | Median rainfall (mm) in the hour up to that time | `precipitation_rate("Zurich", "2026-09-23T14:00")` |
 | `wind_speed(location, when)` | Wind speed (km/h), mean of the hour up to that time | `wind_speed("Zurich", "2026-09-23T14:00")` |
 | `wind_gusts(location, when)` | Strongest one-second gust (km/h) in the hour up to that time | `wind_gusts("Säntis", "2026-09-23T14:00")` |
 | `wind_direction(location, when)` | Direction the wind blows from, in degrees and as a compass point | `wind_direction("Zurich", "2026-09-23T14:00")` |
@@ -232,8 +229,9 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 > Temperature and rain are the median of these outcomes: half lie below it and half above. If the
 > possible temperatures at 14:00 are 18, 19, 20, 21 and 23 °C, the median is 20 °C. It is not the most
 > likely value. Medians do not add up: when showers are possible but unlikely in any single hour,
-> every hourly amount is 0, while the day as a whole still has a median of several millimetres. Ask
-> `daily_forecast` for the rain of a day, not `total_rainfall`.
+> every hourly amount is 0, while the day as a whole still has a median of several millimetres. So
+> `daily_forecast` gives the rain of a day, and `rain_outlook` shows the chance and how much a wet hour
+> may bring.
 
 ## Example Usage with LMStudio
 

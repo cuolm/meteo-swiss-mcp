@@ -19,7 +19,6 @@ TEMPERATURE = "tre200h0"                # Air temperature 2 m above ground; hour
 WIND_SPEED = "fu3010h0"                 # Wind speed scalar; hourly mean in km/h
 WIND_GUSTS = "fu3010h1"                 # Gust peak (one second); hourly maximum in km/h
 WIND_DIRECTION = "dkl010h0"             # Wind direction; hourly mean [°]
-PRECIPITATION = "rre150h0"              # Precipitation; hourly total [mm]
 PRECIPITATION_PROBABILITY = "rp0003i0"  # Probability of precipitation during 3 hours [%]
 PRECIPITATION_3H = "rre003i0"           # Total precipitation during 3 hours [mm]
 PRECIPITATION_Q90 = "rreq90h0"          # Precipitation; hourly total, 90% quantile [mm]

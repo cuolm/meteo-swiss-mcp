@@ -274,34 +274,6 @@ class SwissWeatherMCPServer:
 
         @self.mcp.tool()
         @_handle_tool_call
-        async def total_rainfall(location: str, start: str, end: str) -> dict:
-            """
-            Get the total rainfall for a location over a period.
-
-            The hourly amounts are added up over exactly the hours from start to end. Each is the
-            median amount for its hour, so when showers are possible but unlikely in any single
-            hour, the sum stays 0 even if the day as a whole is expected to be wet. For the rain of a
-            whole day use daily_forecast, and for whether it rains at all precipitation_probability.
-
-            Args:
-                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                start (str): Swiss local time the period starts, ISO 8601 without offset, e.g. "2026-09-23T06:00".
-                end (str): Swiss local time the period ends, ISO 8601 without offset, e.g. "2026-09-23T18:00".
-
-            Returns:
-                dict: Rainfall in millimetres, the resolved location with its altitude, the period,
-                    and the model run.
-
-            Examples:
-                total_rainfall("Zurich", "2026-09-23T00:00", "2026-09-24T00:00")   # the whole day
-                total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T12:00")   # the morning
-            """
-            start_moment = _parse_swiss_time(start)
-            end_moment = _parse_swiss_time(end)
-            return await self.forecast_service.read_total_rainfall(location, start_moment, end_moment)
-
-        @self.mcp.tool()
-        @_handle_tool_call
         async def rain_outlook(location: str, start: str, end: str) -> dict:
             """
             Get when and how much it may rain at a location, in 3-hour blocks over a period.
@@ -354,55 +326,6 @@ class SwissWeatherMCPServer:
             start_moment = _parse_swiss_time(start)
             end_moment = _parse_swiss_time(end)
             return await self.forecast_service.read_sunshine_hours(location, start_moment, end_moment)
-
-        @self.mcp.tool()
-        @_handle_tool_call
-        async def precipitation_probability(location: str, when: str) -> dict:
-            """
-            Get how likely rain is for a location at a specific time.
-
-            The probability covers the three hours up to that time, not a single instant. Use this
-            for "will it rain", and total_rainfall for "how much".
-
-            Args:
-                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
-
-            Returns:
-                dict: Probability in percent, the resolved location with its altitude, the time it
-                    is valid for, and the model run.
-
-            Examples:
-                precipitation_probability("Zurich", "2026-09-23T14:00")
-                precipitation_probability("Lugano", "2026-09-24T18:00")
-            """
-            moment = _parse_swiss_time(when)
-            return await self.forecast_service.read_precipitation_probability(location, moment)
-
-        @self.mcp.tool()
-        @_handle_tool_call
-        async def precipitation_rate(location: str, when: str) -> dict:
-            """
-            Get how much rain falls at a location during one hour.
-
-            This is the median amount in the hour up to that time, so 14:00 means 13:00 to
-            14:00. For whether it rains at all use precipitation_probability, and for a whole day
-            daily_forecast.
-
-            Args:
-                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
-
-            Returns:
-                dict: Rainfall in millimetres per hour, the resolved location with its altitude, the
-                    time it is valid for, and the model run.
-
-            Examples:
-                precipitation_rate("Zurich", "2026-09-23T14:00")
-                precipitation_rate("Lugano", "2026-09-24T18:00")
-            """
-            moment = _parse_swiss_time(when)
-            return await self.forecast_service.read_precipitation_rate(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
