@@ -260,18 +260,20 @@ class SwissWeatherMCPServer:
             Get the wind at a location at a specific time: mean speed, strongest gust and direction.
 
             The speed is the mean over the hour up to that time, and the gust the strongest
-            one-second gust in that hour, which is what makes wind hazardous. The direction is where
-            the wind blows from, in degrees clockwise from north (0 is a north wind, 180 a south
-            wind) and as a compass point.
+            one-second gust in that hour, which is what makes wind hazardous. The gust's 90th
+            percentile is a cautious high estimate of that strongest gust: in 9 of 10 possible
+            outcomes the gust stays below it, and in 1 of 10 it is stronger, so it is not the
+            highest gust possible. The direction is where the wind blows from, in degrees clockwise
+            from north (0 is a north wind, 180 a south wind) and as a compass point.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
                 when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
-                dict: Wind speed and gust in kilometres per hour, the direction in degrees and as a
-                    compass point such as "SW", the resolved location with its altitude, the time it
-                    is valid for, and the model run.
+                dict: Wind speed, gust and the gust's 90th percentile in kilometres per hour, the
+                    direction in degrees and as a compass point such as "SW", the resolved location
+                    with its altitude, the time it is valid for, and the model run.
 
             Examples:
                 wind("Zurich", "2026-09-23T14:00")

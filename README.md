@@ -192,7 +192,7 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 | `hourly_forecast(location, start, end)` | Hour by hour, up to 24 hours, or one hour without `end`: temperature (°C) with its 10th and 90th percentile, rain chance (%) and the weather in words with an emoji | `hourly_forecast("Zurich", "2026-09-23T15:00")` |
 | `rain_outlook(location, start, end)` | Rain in 3-hour blocks, up to 48 hours: chance (%), median (mm) and how much the wettest hour may bring (mm) | `rain_outlook("Zurich", "2026-09-23T12:00", "2026-09-24T00:00")` |
 | `sunshine_hours(location, start, end)` | Sunshine (h) summed over a period | `sunshine_hours("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
-| `wind(location, when)` | Mean speed and strongest gust (km/h) in the hour up to that time, and the direction as degrees and compass point | `wind("Säntis", "2026-09-23T14:00")` |
+| `wind(location, when)` | Mean speed and strongest gust (km/h) in the hour up to that time, how strong that gust may get (its 90th percentile), and the direction as degrees and compass point | `wind("Säntis", "2026-09-23T14:00")` |
 | `total_cloud_cover(location, when)` | Estimated total cloud cover (%) plus the low, medium and high layers | `total_cloud_cover("Zurich", "2026-09-23T14:00")` |
 | `freezing_level(location, when)` | Height of the 0 °C line (m above sea level) | `freezing_level("Zermatt", "2026-09-23T14:00")` |
 
@@ -220,8 +220,8 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 
 > **Note:** `daily_forecast` is by far the cheapest tool, about 8 MB for all its files against about
 > 31 MB for each hourly file, so prefer it when the question is about a day rather than an hour.
-> `hourly_forecast` reads five hourly files, and `rain_outlook`, `wind` and `total_cloud_cover` three
-> each. A tool downloads its files at the same time.
+> `hourly_forecast` reads five hourly files, `wind` four, and `rain_outlook` and `total_cloud_cover`
+> three each. A tool downloads its files at the same time.
 
 > **Note:** MeteoSwiss calculates many slightly different possible outcomes, not just one forecast.
 > Temperature and rain are the median of these outcomes: half lie below it and half above. If the

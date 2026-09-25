@@ -208,21 +208,27 @@ class ForecastService:
         return await self._build_hourly_answer(location, parameters.FREEZING_LEVEL, moment, "m above sea level")
 
     async def read_wind(self, location: str, moment: datetime) -> Dict[str, Any]:
-        """Read the mean wind speed, the strongest gust and the wind direction for the hour up to a moment."""
+        """
+        Read the mean wind speed, the strongest gust with its 90th percentile and the wind direction
+        for the hour up to a moment.
+        """
         point = await self._find_point(location)
-        speed_series, gust_series, direction_series = await asyncio.gather(
+        speed_series, gust_series, upper_gust_series, direction_series = await asyncio.gather(
             self._read_series(parameters.WIND_SPEED, point),
             self._read_series(parameters.WIND_GUSTS, point),
+            self._read_series(parameters.WIND_GUSTS_Q90, point),
             self._read_series(parameters.WIND_DIRECTION, point),
         )
 
         speed_kmh = self._read_value_at(speed_series, moment, point, parameters.WIND_SPEED)
         gusts_kmh = self._read_value_at(gust_series, moment, point, parameters.WIND_GUSTS)
+        upper_gusts_kmh = self._read_value_at(upper_gust_series, moment, point, parameters.WIND_GUSTS_Q90)
         direction_degrees = self._read_value_at(direction_series, moment, point, parameters.WIND_DIRECTION)
         compass_point = _find_compass_point(direction_degrees)
         return {
             "speed_kmh": speed_kmh,
             "gusts_kmh": gusts_kmh,
+            "gusts_90th_percentile_kmh": upper_gusts_kmh,
             "direction_degrees": direction_degrees,
             "compass_point": compass_point,
             "location": point.display_name,

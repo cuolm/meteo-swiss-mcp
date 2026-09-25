@@ -118,6 +118,7 @@ async def test_read_wind(service_fixture):
     answer = await service_fixture.read_wind("Zurich", build_swiss_time("2026-09-23T14:00"))
 
     assert (answer["speed_kmh"], answer["gusts_kmh"]) == (12.5, 38.0)
+    assert answer["gusts_90th_percentile_kmh"] == 55.0
     assert (answer["direction_degrees"], answer["compass_point"]) == (217.0, "SW")
     assert answer["valid_at"] == "2026-09-23T14:00+02:00"
     assert answer["location"] == "Zürich 8001 (409 m)"
@@ -247,7 +248,7 @@ PARALLEL_READ_TIMEOUT_SECONDS = 2
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method_name, arguments, file_count", [
-    ("read_wind", ("Zurich", build_swiss_time("2026-09-23T14:00")), 3),
+    ("read_wind", ("Zurich", build_swiss_time("2026-09-23T14:00")), 4),
     ("read_total_cloud_cover", ("Zurich", build_swiss_time("2026-09-23T14:00")), 3),
     ("read_hourly_forecast", ("Zurich", build_swiss_time("2026-09-23T13:00")), 5),
     ("read_rain_outlook", ("Zurich", build_swiss_time("2026-09-23T14:00"), build_swiss_time("2026-09-23T20:00")), 3),

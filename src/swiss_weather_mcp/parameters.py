@@ -20,6 +20,7 @@ TEMPERATURE_Q10 = "treq10h0"            # Air temperature 2 m above ground; hour
 TEMPERATURE_Q90 = "treq90h0"            # Air temperature 2 m above ground; hourly mean, 90% quantile [°C]
 WIND_SPEED = "fu3010h0"                 # Wind speed scalar; hourly mean in km/h
 WIND_GUSTS = "fu3010h1"                 # Gust peak (one second); hourly maximum in km/h
+WIND_GUSTS_Q90 = "fu3q90h1"             # Gust peak; hourly maximum, 90% quantile in km/h
 WIND_DIRECTION = "dkl010h0"             # Wind direction; hourly mean [°]
 PRECIPITATION_PROBABILITY = "rp0003i0"  # Probability of precipitation during 3 hours [%]
 PRECIPITATION_3H = "rre003i0"           # Total precipitation during 3 hours [mm]
@@ -45,9 +46,9 @@ WEATHER_PICTOGRAM_DAY = "jp2000d0"      # MeteoSwiss pictogram number, daily val
 
 # Every file the server reads. A run is used only once MeteoSwiss lists all of them.
 ALL_PARAMETERS = {
-    TEMPERATURE, TEMPERATURE_Q10, TEMPERATURE_Q90, WIND_SPEED, WIND_GUSTS, WIND_DIRECTION,
-    PRECIPITATION_PROBABILITY, PRECIPITATION_3H, PRECIPITATION_Q90, SUNSHINE, FREEZING_LEVEL,
-    CLOUD_COVER_LOW, CLOUD_COVER_MEDIUM, CLOUD_COVER_HIGH, WEATHER_PICTOGRAM,
+    TEMPERATURE, TEMPERATURE_Q10, TEMPERATURE_Q90, WIND_SPEED, WIND_GUSTS, WIND_GUSTS_Q90,
+    WIND_DIRECTION, PRECIPITATION_PROBABILITY, PRECIPITATION_3H, PRECIPITATION_Q90, SUNSHINE,
+    FREEZING_LEVEL, CLOUD_COVER_LOW, CLOUD_COVER_MEDIUM, CLOUD_COVER_HIGH, WEATHER_PICTOGRAM,
     TEMPERATURE_DAY_MIN, TEMPERATURE_DAY_MAX, PRECIPITATION_DAY, PRECIPITATION_DAY_Q10,
     PRECIPITATION_DAY_Q90, WEATHER_PICTOGRAM_DAY,
 }
