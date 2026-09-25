@@ -7,7 +7,7 @@
 A **Model Context Protocol ([MCP](https://modelcontextprotocol.info/))** server that exposes Swiss weather forecast data as callable tools.
 It reads the official [MeteoSwiss local forecast collection](https://opendatadocs.meteoswiss.ch/e-forecast-data/e4-local-forecast-data), caches it locally, and serves predictions such as rainfall, sunshine, temperature, wind and a worded weather summary. MeteoSwiss publishes these forecasts for **5,614 Swiss locations** (weather stations, postal code areas and points of interest), for **today and the next 8 days**, refreshed **every hour**.
 
-Additionally there is also an MCP client that can be run to test the server using the stdio transport.
+There is also an MCP client that can be run to test the server using the stdio transport.
 
 > **Note:** This project is **not an official MeteoSwiss product**. All forecast data are from the
 > [MeteoSwiss Open Data](https://opendata.swiss/en/organization/bundesamt-fur-meteorologie-und-klimatologie-meteoschweiz) portal. **Source: MeteoSwiss**
@@ -32,7 +32,9 @@ swiss-weather-mcp/
 │   ├── forecast.py         # Weather values, units and aggregation
 │   ├── meteoswiss.py       # MeteoSwiss data source, caching and location lookup
 │   ├── parameters.py       # MeteoSwiss parameter codes and pictogram meanings
+│   ├── other_language_place_names.csv  # Place names in other languages
 │   └── client.py           # MCP client (optional)
+├── scripts/                # Builds other_language_place_names.csv
 ├── tests/swiss_weather_mcp/  # Tests
 ├── .github/workflows/      # CI and release pipelines
 ├── docs/                   # Documentation
@@ -216,10 +218,10 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 > lowest is 3004, its old town 3011). The answer names the point it used, and a postal code picks a
 > specific district.
 
-> **Note:** `daily_forecast` is by far the cheapest tool, about 8 MB against about 31 MB per hourly
-> parameter, so prefer it when the question is about a day rather than an hour. `hourly_forecast`,
-> `rain_outlook`, `wind` and `total_cloud_cover` each read three hourly files, and download them at
-> the same time.
+> **Note:** `daily_forecast` is by far the cheapest tool, about 8 MB for all its files against about
+> 31 MB for each hourly file, so prefer it when the question is about a day rather than an hour.
+> `hourly_forecast`, `rain_outlook`, `wind` and `total_cloud_cover` each read three hourly files, and
+> download them at the same time.
 
 > **Note:** MeteoSwiss calculates many slightly different possible outcomes, not just one forecast.
 > Temperature and rain are the median of these outcomes: half lie below it and half above. If the
