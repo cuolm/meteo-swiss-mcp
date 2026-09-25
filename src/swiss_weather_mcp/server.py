@@ -169,8 +169,8 @@ class SwissWeatherMCPServer:
         @_handle_tool_call
         async def hourly_forecast(location: str, start: str, end: Optional[str] = None) -> dict:
             """
-            Get the weather hour by hour for a location: temperature, chance of rain and the weather
-            in words.
+            Get the weather hour by hour for a location: temperature with its likely range, chance
+            of rain and the weather in words.
 
             Use this for one hour, such as "how warm is it at 15:00", or part of a day, such as "how
             is the afternoon" or "when is the best time for a walk". Without end it returns the one
@@ -186,8 +186,9 @@ class SwissWeatherMCPServer:
 
             Returns:
                 dict: The resolved location with its altitude, one row per hour (from, to,
-                    temperature in Celsius, rain chance in percent, weather in words with a matching
-                    emoji), and the model run.
+                    temperature in Celsius as its median and its 10th and 90th percentile, rain
+                    chance in percent, weather in words with a matching emoji), and the model run.
+                    In 8 of 10 possible outcomes, the temperature lies between the two percentiles.
 
             Examples:
                 hourly_forecast("Zurich", "2026-09-23T15:00")                        # one hour

@@ -137,6 +137,8 @@ async def test_read_hourly_forecast(service_fixture):
         ("2026-09-23T14:00+02:00", "2026-09-23T15:00+02:00"),
     ]
     assert [hour["temperature_c"] for hour in answer["hours"]] == [12.0, 14.5]
+    assert [hour["temperature_10th_percentile_c"] for hour in answer["hours"]] == [10.8, 13.2]
+    assert [hour["temperature_90th_percentile_c"] for hour in answer["hours"]] == [13.4, 16.1]
     assert [hour["rain_chance_percent"] for hour in answer["hours"]] == [10.0, 20.0]
     assert [(hour["weather"], hour["weather_emoji"]) for hour in answer["hours"]] == [
         ("mostly sunny, some clouds", "🌤️"),
@@ -247,7 +249,7 @@ PARALLEL_READ_TIMEOUT_SECONDS = 2
 @pytest.mark.parametrize("method_name, arguments, file_count", [
     ("read_wind", ("Zurich", build_swiss_time("2026-09-23T14:00")), 3),
     ("read_total_cloud_cover", ("Zurich", build_swiss_time("2026-09-23T14:00")), 3),
-    ("read_hourly_forecast", ("Zurich", build_swiss_time("2026-09-23T13:00")), 3),
+    ("read_hourly_forecast", ("Zurich", build_swiss_time("2026-09-23T13:00")), 5),
     ("read_rain_outlook", ("Zurich", build_swiss_time("2026-09-23T14:00"), build_swiss_time("2026-09-23T20:00")), 3),
     ("read_daily_forecast", ("Zurich", date(2026, 9, 23), 1), 6),
 ])

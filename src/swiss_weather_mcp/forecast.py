@@ -263,7 +263,8 @@ class ForecastService:
         self, location: str, start_moment: datetime, end_moment: Optional[datetime] = None
     ) -> Dict[str, Any]:
         """
-        Read the temperature, rain chance and weather for every hour from start to end.
+        Read the temperature with its 10th and 90th percentile, rain chance and weather for every
+        hour from start to end.
 
         Parameters:
             location (str): Location name or postal code.
@@ -293,12 +294,14 @@ class ForecastService:
             period = f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)}"
 
         point = await self._find_point(location)
-        temperature_series, chance_series, pictogram_series = await asyncio.gather(
+        temperature_series, lower_series, upper_series, chance_series, pictogram_series = await asyncio.gather(
             self._read_series(parameters.TEMPERATURE, point),
+            self._read_series(parameters.TEMPERATURE_Q10, point),
+            self._read_series(parameters.TEMPERATURE_Q90, point),
             self._read_series(parameters.PRECIPITATION_PROBABILITY, point),
             self._read_series(parameters.WEATHER_PICTOGRAM, point),
         )
-        all_series = (temperature_series, chance_series, pictogram_series)
+        all_series = (temperature_series, lower_series, upper_series, chance_series, pictogram_series)
 
         hours = []
         stamp = first_stamp
@@ -315,6 +318,8 @@ class ForecastService:
                 "from": _format_swiss_time(stamp - timedelta(hours=1)),
                 "to": _format_swiss_time(stamp),
                 "temperature_c": temperature_series.values[stamp],
+                "temperature_10th_percentile_c": lower_series.values[stamp],
+                "temperature_90th_percentile_c": upper_series.values[stamp],
                 "rain_chance_percent": chance_series.values[stamp],
                 "weather": description,
                 "weather_emoji": weather_emoji,
