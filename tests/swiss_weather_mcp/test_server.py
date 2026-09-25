@@ -20,6 +20,7 @@ EXPECTED_TOOLS = {
     "weather_description": ["location", "when"],
     "temperature": ["location", "when"],
     "total_rainfall": ["location", "start", "end"],
+    "rain_outlook": ["location", "start", "end"],
     "sunshine_hours": ["location", "start", "end"],
     "precipitation_probability": ["location", "when"],
     "precipitation_rate": ["location", "when"],

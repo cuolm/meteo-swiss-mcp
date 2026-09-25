@@ -33,6 +33,9 @@ DAILY_PARAMETERS = (
 # MeteoSwiss publishes today and the next 8 days
 MAX_OUTLOOK_DAYS = 9
 
+RAIN_BLOCK = timedelta(hours=3)
+MAX_RAIN_OUTLOOK = timedelta(hours=48)
+
 
 def _find_closing_stamp(moment: datetime) -> datetime:
     """
@@ -57,6 +60,15 @@ def _find_nearest_stamp(moment: datetime) -> datetime:
 def _format_swiss_time(moment: datetime) -> str:
     """Format a moment as ISO 8601 Swiss local time with its UTC offset, such as 2026-09-23T14:00+02:00."""
     return moment.astimezone(SWISS_TZ).isoformat(timespec="minutes")
+
+
+def _check_period_order(start_moment: datetime, end_moment: datetime) -> None:
+    """Refuse a period whose end is not after its start."""
+    if end_moment <= start_moment:
+        raise ValueError(
+            f"The end of the period, {_format_swiss_time(end_moment)}, must be after its start, "
+            f"{_format_swiss_time(start_moment)}."
+        )
 
 
 def _describe_covered_range(series: ForecastSeries) -> str:
@@ -139,12 +151,7 @@ class ForecastService:
 
     def _sum_between(self, series: ForecastSeries, start_moment: datetime, end_moment: datetime, point: ForecastPoint) -> float:
         """Add up the hourly values from start to end."""
-        if end_moment <= start_moment:
-            raise ValueError(
-                f"The end of the period, {_format_swiss_time(end_moment)}, must be after its start, "
-                f"{_format_swiss_time(start_moment)}."
-            )
-
+        _check_period_order(start_moment, end_moment)
         first_stamp = _find_closing_stamp(start_moment)
         last_stamp = _find_closing_stamp(end_moment)
         # The first hour of the period is the row stamped one hour after its start
@@ -271,6 +278,59 @@ class ForecastService:
             medium_percent=round(layers["medium"] * 100, 1),
             high_percent=round(layers["high"] * 100, 1),
         )
+
+    async def read_rain_outlook(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
+        """
+        Read when and how much it may rain, in 3-hour blocks from start to end.
+
+        Parameters:
+            location (str): Location name or postal code.
+            start_moment (datetime): Start of the period, timezone aware.
+            end_moment (datetime): End of the period, at most MAX_RAIN_OUTLOOK after the start.
+
+        Returns:
+            Dict[str, Any]: The resolved point, one row per block with the rain chance, the median
+                rainfall and the heaviest hour's 90th percentile, and the model run.
+        """
+        _check_period_order(start_moment, end_moment)
+        if end_moment - start_moment > MAX_RAIN_OUTLOOK:
+            max_hours = int(MAX_RAIN_OUTLOOK.total_seconds() // 3600)
+            raise ValueError(f"A rain outlook covers at most {max_hours} hours; ask for a shorter period.")
+
+        point = await self._find_point(location)
+        chance_series = await self._read_series(parameters.PRECIPITATION_PROBABILITY, point)
+        median_series = await self._read_series(parameters.PRECIPITATION_3H, point)
+        upper_series = await self._read_series(parameters.PRECIPITATION_Q90, point)
+
+        blocks = []
+        block_start = _find_closing_stamp(start_moment)
+        last_stamp = _find_closing_stamp(end_moment)
+        while block_start < last_stamp:
+            block_end = block_start + RAIN_BLOCK
+            # The 3-hour values sit on the block's end, the hourly ones on each of its three hours
+            hour_stamps = [block_end - timedelta(hours=hours_before) for hours_before in (2, 1, 0)]
+            if (block_end not in chance_series.values or block_end not in median_series.values
+                    or any(stamp not in upper_series.values for stamp in hour_stamps)):
+                raise ValueError(
+                    f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)} is not fully covered "
+                    f"by the forecast for {point.display_name}. {_describe_covered_range(median_series)}"
+                )
+            heaviest_hour_mm = max(upper_series.values[stamp] for stamp in hour_stamps)
+            blocks.append({
+                "from": _format_swiss_time(block_start),
+                "to": _format_swiss_time(block_end),
+                "rain_chance_percent": chance_series.values[block_end],
+                "rainfall_median_mm": round(median_series.values[block_end], 1),
+                "heaviest_hour_up_to_mm": round(heaviest_hour_mm, 1),
+            })
+            block_start = block_end
+
+        return {
+            "location": point.display_name,
+            "altitude_m": point.altitude_m,
+            "blocks": blocks,
+            "model_run": _format_swiss_time(median_series.run_time),
+        }
 
     async def _read_series_if_published(self, parameter: str, point: ForecastPoint) -> Optional[ForecastSeries]:
         """Read one parameter for one point, or return None when MeteoSwiss does not publish it there."""
