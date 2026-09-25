@@ -7,39 +7,6 @@ from swiss_weather_mcp.forecast import _describe_pictogram, _find_compass_point
 from swiss_weather_mcp.parameters import PICTOGRAMS
 
 
-# --- read_temperature ---
-
-@pytest.mark.asyncio
-async def test_read_temperature(service_fixture):
-    answer = await service_fixture.read_temperature("Zurich", build_swiss_time("2026-09-23T14:00"))
-
-    assert answer["value"] == 12.0  # 14:00 Swiss in September is 12:00 UTC
-    assert answer["unit"] == "°C"
-    assert answer["location"] == "Zürich 8001 (409 m)"
-    assert answer["altitude_m"] == 409.0
-    assert answer["valid_at"] == "2026-09-23T14:00+02:00"
-    assert answer["model_run"] == "2026-09-22T15:00+02:00"
-
-
-@pytest.mark.asyncio
-async def test_read_temperature_inside_an_hour(service_fixture):
-    # 14:30 Swiss lies in the hour 14:00 to 15:00, which is the row stamped 13:00 UTC
-    answer = await service_fixture.read_temperature("Zurich", build_swiss_time("2026-09-23T14:30"))
-    assert answer["value"] == 14.5
-
-
-@pytest.mark.asyncio
-async def test_read_temperature_outside_the_forecast(service_fixture):
-    # Times are written as the answers write them, with the offset of their own date: 30 October is
-    # already winter time, the covered range is still summer time
-    with pytest.raises(ValueError, match="is outside the forecast") as raised:
-        await service_fixture.read_temperature("Zurich", build_swiss_time("2026-10-30T14:00"))
-
-    assert str(raised.value).startswith("2026-10-30T14:00+01:00 is outside the forecast")
-    assert "The forecast covers 2026-09-23T08:00+02:00 to 2026-09-23T15:00+02:00." in str(raised.value)
-    assert "tre200h0" not in str(raised.value)  # a parameter code means nothing to the model
-
-
 # --- read_sunshine_hours ---
 
 @pytest.mark.asyncio
@@ -99,17 +66,6 @@ async def test_read_total_cloud_cover_nearest_snapshot(service_fixture):
     # 14:20 Swiss reads the 14:00 snapshot (12:00 UTC) rather than the one closing that hour
     answer = await service_fixture.read_total_cloud_cover("Zurich", build_swiss_time("2026-09-23T14:20"))
     assert answer["value"] == 75.0
-
-
-# --- read_weather_description ---
-
-@pytest.mark.asyncio
-async def test_read_weather_description(service_fixture):
-    answer = await service_fixture.read_weather_description("Zurich", build_swiss_time("2026-09-23T14:00"))
-
-    assert answer["value"] == "mostly sunny, some clouds"
-    assert answer["pictogram_code"] == 2
-    assert answer["weather_emoji"] == "🌤️"
 
 
 # --- read_daily_forecast ---
@@ -175,7 +131,10 @@ async def test_read_hourly_forecast(service_fixture):
         "Zurich", build_swiss_time("2026-09-23T13:00"), build_swiss_time("2026-09-23T15:00")
     )
 
-    assert [hour["time"] for hour in answer["hours"]] == ["2026-09-23T14:00+02:00", "2026-09-23T15:00+02:00"]
+    assert [(hour["from"], hour["to"]) for hour in answer["hours"]] == [
+        ("2026-09-23T13:00+02:00", "2026-09-23T14:00+02:00"),
+        ("2026-09-23T14:00+02:00", "2026-09-23T15:00+02:00"),
+    ]
     assert [hour["temperature_c"] for hour in answer["hours"]] == [12.0, 14.5]
     assert [hour["rain_chance_percent"] for hour in answer["hours"]] == [10.0, 20.0]
     assert [(hour["weather"], hour["weather_emoji"]) for hour in answer["hours"]] == [
@@ -183,15 +142,37 @@ async def test_read_hourly_forecast(service_fixture):
         ("partly sunny, thick passing clouds", "⛅"),
     ]
     assert answer["location"] == "Zürich 8001 (409 m)"
+    assert answer["model_run"] == "2026-09-22T15:00+02:00"
+
+
+@pytest.mark.asyncio
+async def test_read_hourly_forecast_one_hour(service_fixture):
+    # Without an end, the one hour starting at start: 13:00 to 14:00 Swiss, the row stamped 12:00 UTC
+    answer = await service_fixture.read_hourly_forecast("Zurich", build_swiss_time("2026-09-23T13:00"))
+
+    assert [(hour["from"], hour["to"]) for hour in answer["hours"]] == [("2026-09-23T13:00+02:00", "2026-09-23T14:00+02:00")]
+    assert answer["hours"][0]["temperature_c"] == 12.0
 
 
 @pytest.mark.asyncio
 async def test_read_hourly_forecast_inside_an_hour(service_fixture):
-    # 13:10 to 13:20 Swiss lies in the hour ending at 14:00 Swiss, 12:00 UTC
-    answer = await service_fixture.read_hourly_forecast(
-        "Zurich", build_swiss_time("2026-09-23T13:10"), build_swiss_time("2026-09-23T13:20")
-    )
-    assert [hour["time"] for hour in answer["hours"]] == ["2026-09-23T14:00+02:00"]
+    # 14:30 Swiss lies in the hour 14:00 to 15:00, which is the row stamped 13:00 UTC
+    answer = await service_fixture.read_hourly_forecast("Zurich", build_swiss_time("2026-09-23T14:30"))
+
+    assert [(hour["from"], hour["to"]) for hour in answer["hours"]] == [("2026-09-23T14:00+02:00", "2026-09-23T15:00+02:00")]
+    assert answer["hours"][0]["temperature_c"] == 14.5
+
+
+@pytest.mark.asyncio
+async def test_read_hourly_forecast_outside_the_forecast(service_fixture):
+    # Times are written as the answers write them, with the offset of their own date: 30 October is
+    # already winter time, the covered range is still summer time
+    with pytest.raises(ValueError, match="is not fully covered by the forecast") as raised:
+        await service_fixture.read_hourly_forecast("Zurich", build_swiss_time("2026-10-30T14:00"))
+
+    assert str(raised.value).startswith("2026-10-30T14:00+01:00 is not fully covered by the forecast")
+    assert "The forecast covers 2026-09-23T14:00+02:00 to 2026-09-23T15:00+02:00." in str(raised.value)
+    assert "jww003i0" not in str(raised.value)  # a parameter code means nothing to the model
 
 
 @pytest.mark.asyncio

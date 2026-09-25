@@ -187,9 +187,7 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 |------|---------|--------------|
 | `current_date_and_time()` | Today's weekday and the Swiss time now, in the form the tools accept | `current_date_and_time()` |
 | `daily_forecast(location, start_date, days)` | One row per day, 1 to 9 days: lowest and highest hourly temperature, median rainfall with its 10th and 90th percentile, daytime weather in words with an emoji | `daily_forecast("Zurich", "2026-09-26", 2)` |
-| `weather_description(location, when)` | The weather in words for the 3 hours up to that time, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
-| `hourly_forecast(location, start, end)` | Hour by hour, up to 24 hours: temperature (°C), rain chance (%) and the weather in words with an emoji | `hourly_forecast("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")` |
-| `temperature(location, when)` | Air temperature (°C), mean of the hour up to that time, 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
+| `hourly_forecast(location, start, end)` | Hour by hour, up to 24 hours, or one hour without `end`: temperature (°C), rain chance (%) and the weather in words with an emoji | `hourly_forecast("Zurich", "2026-09-23T15:00")` |
 | `rain_outlook(location, start, end)` | Rain in 3-hour blocks, up to 48 hours: chance (%), median (mm) and how much the wettest hour may bring (mm) | `rain_outlook("Zurich", "2026-09-23T12:00", "2026-09-24T00:00")` |
 | `sunshine_hours(location, start, end)` | Sunshine (h) summed over a period | `sunshine_hours("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
 | `wind(location, when)` | Mean speed and strongest gust (km/h) in the hour up to that time, and the direction as degrees and compass point | `wind("Säntis", "2026-09-23T14:00")` |
@@ -219,8 +217,8 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 > specific district.
 
 > **Note:** `daily_forecast` is by far the cheapest tool, about 8 MB against about 31 MB per hourly
-> parameter, so prefer it when the question is about a day rather than an hour. `total_cloud_cover`
-> is the most expensive because it reads three files.
+> parameter, so prefer it when the question is about a day rather than an hour. `hourly_forecast`,
+> `rain_outlook`, `wind` and `total_cloud_cover` each read three hourly files.
 
 > **Note:** MeteoSwiss calculates many slightly different possible outcomes, not just one forecast.
 > Temperature and rain are the median of these outcomes: half lie below it and half above. If the

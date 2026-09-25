@@ -5,7 +5,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 import requests
 from mcp.server.mcpserver import MCPServer
@@ -167,82 +167,35 @@ class SwissWeatherMCPServer:
 
         @self.mcp.tool()
         @_handle_tool_call
-        async def weather_description(location: str, when: str) -> dict:
+        async def hourly_forecast(location: str, start: str, end: Optional[str] = None) -> dict:
             """
-            Get the weather in words for a location at a specific time.
+            Get the weather hour by hour for a location: temperature, chance of rain and the weather
+            in words.
 
-            The description covers the three hours up to the given time, and reads like
-            "mostly sunny, some clouds" or "very cloudy, light rain".
-
-            Args:
-                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
-
-            Returns:
-                dict: The description, a matching emoji, the MeteoSwiss pictogram code behind it,
-                    the resolved location with its altitude, the time it is valid for, and the
-                    model run.
-
-            Examples:
-                weather_description("Zurich", "2026-09-23T14:00")
-                weather_description("Davos", "2026-09-24T08:00")
-            """
-            moment = _parse_swiss_time(when)
-            return await self.forecast_service.read_weather_description(location, moment)
-
-        @self.mcp.tool()
-        @_handle_tool_call
-        async def hourly_forecast(location: str, start: str, end: str) -> dict:
-            """
-            Get the weather hour by hour for a location over a period: temperature, chance of rain
-            and the weather in words.
-
-            Use this for part of a day, such as "how is the afternoon" or "when is the best time for
-            a walk". Each row covers the hour up to its time: the temperature is the mean of that
-            hour, the rain chance and the weather cover the 3 hours up to it. For whole days use
+            Use this for one hour, such as "how warm is it at 15:00", or part of a day, such as "how
+            is the afternoon" or "when is the best time for a walk". Without end it returns the one
+            hour starting at start. Each row covers the hour from its "from" to its "to": the
+            temperature is the mean of that hour, while the rain chance and the weather cover the 3
+            hours up to "to", as MeteoSwiss publishes them only per 3 hours. For whole days use
             daily_forecast, for rain amounts rain_outlook.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                start (str): Swiss local time the period starts, ISO 8601 without offset, e.g. "2026-09-23T12:00".
-                end (str): Swiss local time the period ends, at most 24 hours after start.
+                start (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T15:00". Today or up to 8 days ahead.
+                end (str): Optional. Swiss local time in ISO 8601 without offset, at most 24 hours after start.
 
             Returns:
-                dict: The resolved location with its altitude, one row per hour (time, temperature in
-                    Celsius, rain chance in percent, weather in words with a matching emoji), and the
-                    model run.
+                dict: The resolved location with its altitude, one row per hour (from, to,
+                    temperature in Celsius, rain chance in percent, weather in words with a matching
+                    emoji), and the model run.
 
             Examples:
-                hourly_forecast("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")
-                hourly_forecast("Davos", "2026-09-24T06:00", "2026-09-24T12:00")
+                hourly_forecast("Zurich", "2026-09-23T15:00")                        # one hour
+                hourly_forecast("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")    # the afternoon
             """
             start_moment = _parse_swiss_time(start)
-            end_moment = _parse_swiss_time(end)
+            end_moment = _parse_swiss_time(end) if end is not None else None
             return await self.forecast_service.read_hourly_forecast(location, start_moment, end_moment)
-
-        @self.mcp.tool()
-        @_handle_tool_call
-        async def temperature(location: str, when: str) -> dict:
-            """
-            Get the air temperature for a location at a specific time.
-
-            This is the mean over the hour up to that time, 2 metres above ground, so 14:00 means
-            13:00 to 14:00. For a day's highest and lowest temperature use daily_forecast instead.
-
-            Args:
-                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
-                when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
-
-            Returns:
-                dict: Temperature in Celsius, the resolved location with its altitude, the time it
-                    is valid for, and the model run.
-
-            Examples:
-                temperature("Zurich", "2026-09-23T14:00")
-                temperature("Zermatt", "2026-09-25T07:00")
-            """
-            moment = _parse_swiss_time(when)
-            return await self.forecast_service.read_temperature(location, moment)
 
         @self.mcp.tool()
         @_handle_tool_call
@@ -336,8 +289,7 @@ class SwissWeatherMCPServer:
             total is an estimate that assumes the layers are independent. All three layers are
             returned as well, which tells low fog apart from thin high cloud.
 
-            This reads three files, so it is the most expensive tool. When a number is not needed,
-            weather_description answers "how cloudy" more cheaply and in plain words.
+            When a number is not needed, hourly_forecast answers "how cloudy" in plain words.
 
             Args:
                 location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
