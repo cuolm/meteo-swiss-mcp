@@ -35,6 +35,7 @@ MAX_OUTLOOK_DAYS = 9
 
 RAIN_BLOCK = timedelta(hours=3)
 MAX_RAIN_OUTLOOK = timedelta(hours=48)
+MAX_HOURLY_FORECAST = timedelta(hours=24)
 
 
 def _find_closing_stamp(moment: datetime) -> datetime:
@@ -278,6 +279,57 @@ class ForecastService:
             medium_percent=round(layers["medium"] * 100, 1),
             high_percent=round(layers["high"] * 100, 1),
         )
+
+    async def read_hourly_forecast(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
+        """
+        Read the temperature, rain chance and weather for every hour from start to end.
+
+        Parameters:
+            location (str): Location name or postal code.
+            start_moment (datetime): Start of the period, timezone aware.
+            end_moment (datetime): End of the period, at most MAX_HOURLY_FORECAST after the start.
+
+        Returns:
+            Dict[str, Any]: The resolved point, one row per hour, and the model run.
+        """
+        _check_period_order(start_moment, end_moment)
+        if end_moment - start_moment > MAX_HOURLY_FORECAST:
+            max_hours = int(MAX_HOURLY_FORECAST.total_seconds() // 3600)
+            raise ValueError(f"An hourly forecast covers at most {max_hours} hours; for more use weather_outlook.")
+
+        point = await self._find_point(location)
+        temperature_series = await self._read_series(parameters.TEMPERATURE, point)
+        chance_series = await self._read_series(parameters.PRECIPITATION_PROBABILITY, point)
+        pictogram_series = await self._read_series(parameters.WEATHER_PICTOGRAM, point)
+
+        stamp = _find_closing_stamp(start_moment)
+        # The hour ending exactly at the start lies before the period
+        if stamp == start_moment:
+            stamp += timedelta(hours=1)
+        last_stamp = _find_closing_stamp(end_moment)
+        hours = []
+        while stamp <= last_stamp:
+            if any(stamp not in series.values for series in (temperature_series, chance_series, pictogram_series)):
+                raise ValueError(
+                    f"{_format_swiss_time(start_moment)} to {_format_swiss_time(end_moment)} is not fully covered "
+                    f"by the forecast for {point.display_name}. {_describe_covered_range(pictogram_series)}"
+                )
+            description, weather_emoji = _describe_pictogram(int(pictogram_series.values[stamp]))
+            hours.append({
+                "time": _format_swiss_time(stamp),
+                "temperature_c": temperature_series.values[stamp],
+                "rain_chance_percent": chance_series.values[stamp],
+                "weather": description,
+                "weather_emoji": weather_emoji,
+            })
+            stamp += timedelta(hours=1)
+
+        return {
+            "location": point.display_name,
+            "altitude_m": point.altitude_m,
+            "hours": hours,
+            "model_run": _format_swiss_time(temperature_series.run_time),
+        }
 
     async def read_rain_outlook(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
         """

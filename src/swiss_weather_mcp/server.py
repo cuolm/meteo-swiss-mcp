@@ -220,6 +220,36 @@ class SwissWeatherMCPServer:
 
         @self.mcp.tool()
         @_handle_tool_call
+        async def hourly_forecast(location: str, start: str, end: str) -> dict:
+            """
+            Get the weather hour by hour for a location over a period: temperature, chance of rain
+            and the weather in words.
+
+            Use this for part of a day, such as "how is the afternoon" or "when is the best time for
+            a walk". Each row covers the hour up to its time: the temperature is the mean of that
+            hour, the rain chance and the weather cover the 3 hours up to it. For whole days use
+            weather_outlook, for rain amounts rain_outlook.
+
+            Args:
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                start (str): Swiss local time the period starts, ISO 8601 without offset, e.g. "2026-09-23T12:00".
+                end (str): Swiss local time the period ends, at most 24 hours after start.
+
+            Returns:
+                dict: The resolved location with its altitude, one row per hour (time, temperature in
+                    Celsius, rain chance in percent, weather in words with a matching emoji), and the
+                    model run.
+
+            Examples:
+                hourly_forecast("Zurich", "2026-09-23T12:00", "2026-09-23T18:00")
+                hourly_forecast("Davos", "2026-09-24T06:00", "2026-09-24T12:00")
+            """
+            start_moment = _parse_swiss_time(start)
+            end_moment = _parse_swiss_time(end)
+            return await self.forecast_service.read_hourly_forecast(location, start_moment, end_moment)
+
+        @self.mcp.tool()
+        @_handle_tool_call
         async def temperature(location: str, when: str) -> dict:
             """
             Get the air temperature for a location at a specific time.

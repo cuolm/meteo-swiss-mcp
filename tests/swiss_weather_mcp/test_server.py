@@ -18,6 +18,7 @@ EXPECTED_TOOLS = {
     "daily_forecast": ["location", "date"],
     "weather_outlook": ["location", "days"],
     "weather_description": ["location", "when"],
+    "hourly_forecast": ["location", "start", "end"],
     "temperature": ["location", "when"],
     "total_rainfall": ["location", "start", "end"],
     "rain_outlook": ["location", "start", "end"],

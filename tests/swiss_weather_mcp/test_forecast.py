@@ -160,6 +160,50 @@ async def test_read_weather_outlook_outside_the_forecast(service_fixture):
         await service_fixture.read_weather_outlook("Zurich", date(2026, 10, 30), 3)
 
 
+# --- read_hourly_forecast ---
+
+@pytest.mark.asyncio
+async def test_read_hourly_forecast(service_fixture):
+    # 13:00 to 15:00 Swiss is 11:00 to 13:00 UTC: the hours ending at 12:00 and 13:00 UTC
+    answer = await service_fixture.read_hourly_forecast(
+        "Zurich", build_swiss_time("2026-09-23T13:00"), build_swiss_time("2026-09-23T15:00")
+    )
+
+    assert [hour["time"] for hour in answer["hours"]] == ["2026-09-23T14:00+02:00", "2026-09-23T15:00+02:00"]
+    assert [hour["temperature_c"] for hour in answer["hours"]] == [12.0, 14.5]
+    assert [hour["rain_chance_percent"] for hour in answer["hours"]] == [10.0, 20.0]
+    assert [(hour["weather"], hour["weather_emoji"]) for hour in answer["hours"]] == [
+        ("mostly sunny, some clouds", "🌤️"),
+        ("partly sunny, thick passing clouds", "⛅"),
+    ]
+    assert answer["location"] == "Zürich 8001 (409 m)"
+
+
+@pytest.mark.asyncio
+async def test_read_hourly_forecast_inside_an_hour(service_fixture):
+    # 13:10 to 13:20 Swiss lies in the hour ending at 14:00 Swiss, 12:00 UTC
+    answer = await service_fixture.read_hourly_forecast(
+        "Zurich", build_swiss_time("2026-09-23T13:10"), build_swiss_time("2026-09-23T13:20")
+    )
+    assert [hour["time"] for hour in answer["hours"]] == ["2026-09-23T14:00+02:00"]
+
+
+@pytest.mark.asyncio
+async def test_read_hourly_forecast_past_the_end(service_fixture):
+    with pytest.raises(ValueError, match="not fully covered by the forecast"):
+        await service_fixture.read_hourly_forecast(
+            "Zurich", build_swiss_time("2026-09-23T13:00"), build_swiss_time("2026-09-23T17:00")
+        )
+
+
+@pytest.mark.asyncio
+async def test_read_hourly_forecast_too_long(service_fixture):
+    with pytest.raises(ValueError, match="at most 24 hours"):
+        await service_fixture.read_hourly_forecast(
+            "Zurich", build_swiss_time("2026-09-23T13:00"), build_swiss_time("2026-09-24T14:00")
+        )
+
+
 # --- read_rain_outlook ---
 
 @pytest.mark.asyncio
