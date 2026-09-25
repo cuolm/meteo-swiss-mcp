@@ -154,7 +154,8 @@ class SwissWeatherMCPServer:
                 dict: Minimum and maximum temperature in Celsius; the day's rainfall in millimetres
                     as its median and its 10th and 90th percentile, meaning a 90% chance of at least
                     the 10th-percentile amount and at most the 90th-percentile amount; a worded
-                    weather summary, the resolved location with its altitude, and the model run.
+                    weather summary with a matching emoji, the resolved location with its altitude,
+                    and the model run.
                     A value is None when MeteoSwiss does not publish it for that location.
 
             Examples:
@@ -182,7 +183,7 @@ class SwissWeatherMCPServer:
             Returns:
                 dict: The resolved location with its altitude, one row per day (date, weekday,
                     minimum and maximum temperature in Celsius, rainfall in millimetres, weather in
-                    words), and the model run. A value is None when MeteoSwiss does not publish it
+                    words with a matching emoji), and the model run. A value is None when MeteoSwiss does not publish it
                     for that location.
 
             Examples:
@@ -206,8 +207,9 @@ class SwissWeatherMCPServer:
                 when (str): Swiss local time in ISO 8601 without offset, e.g. "2026-09-23T14:00". Today or up to 8 days ahead.
 
             Returns:
-                dict: The description, the MeteoSwiss pictogram code behind it, the resolved
-                    location with its altitude, the time it is valid for, and the model run.
+                dict: The description, a matching emoji, the MeteoSwiss pictogram code behind it,
+                    the resolved location with its altitude, the time it is valid for, and the
+                    model run.
 
             Examples:
                 weather_description("Zurich", "2026-09-23T14:00")
