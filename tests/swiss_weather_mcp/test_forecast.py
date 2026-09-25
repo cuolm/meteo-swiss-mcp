@@ -160,6 +160,50 @@ async def test_read_weather_outlook_outside_the_forecast(service_fixture):
         await service_fixture.read_weather_outlook("Zurich", date(2026, 10, 30), 3)
 
 
+# --- read_rain_outlook ---
+
+@pytest.mark.asyncio
+async def test_read_rain_outlook(service_fixture):
+    # 14:00 to 20:00 Swiss is 12:00 to 18:00 UTC: two blocks, ending at 15:00 and 18:00 UTC
+    answer = await service_fixture.read_rain_outlook(
+        "Zurich", build_swiss_time("2026-09-23T14:00"), build_swiss_time("2026-09-23T20:00")
+    )
+
+    assert [(block["from"], block["to"]) for block in answer["blocks"]] == [
+        ("2026-09-23T14:00+02:00", "2026-09-23T17:00+02:00"),
+        ("2026-09-23T17:00+02:00", "2026-09-23T20:00+02:00"),
+    ]
+    assert [block["rain_chance_percent"] for block in answer["blocks"]] == [40.0, 80.0]
+    assert [block["rainfall_median_mm"] for block in answer["blocks"]] == [0.0, 2.4]
+    # The heaviest hour of each block, not a sum: quantiles do not add up
+    assert [block["heaviest_hour_up_to_mm"] for block in answer["blocks"]] == [1.1, 3.5]
+    assert answer["location"] == "Zürich 8001 (409 m)"
+
+
+@pytest.mark.asyncio
+async def test_read_rain_outlook_past_the_end(service_fixture):
+    with pytest.raises(ValueError, match="not fully covered by the forecast"):
+        await service_fixture.read_rain_outlook(
+            "Zurich", build_swiss_time("2026-09-23T14:00"), build_swiss_time("2026-09-23T23:00")
+        )
+
+
+@pytest.mark.asyncio
+async def test_read_rain_outlook_too_long(service_fixture):
+    with pytest.raises(ValueError, match="at most 48 hours"):
+        await service_fixture.read_rain_outlook(
+            "Zurich", build_swiss_time("2026-09-23T14:00"), build_swiss_time("2026-09-25T20:00")
+        )
+
+
+@pytest.mark.asyncio
+async def test_read_rain_outlook_reversed_period(service_fixture):
+    with pytest.raises(ValueError, match="must be after its start"):
+        await service_fixture.read_rain_outlook(
+            "Zurich", build_swiss_time("2026-09-23T20:00"), build_swiss_time("2026-09-23T14:00")
+        )
+
+
 # --- _describe_pictogram ---
 
 def test_describe_pictogram():

@@ -191,6 +191,7 @@ they resolved, its altitude, the time or day it applies to, and the model run th
 | `weather_description(location, when)` | The weather in words for the 3 hours up to that time, e.g. "mostly sunny, some clouds" | `weather_description("Zurich", "2026-09-23T14:00")` |
 | `temperature(location, when)` | Air temperature (°C), mean of the hour up to that time, 2 m above ground | `temperature("Zurich", "2026-09-23T14:00")` |
 | `total_rainfall(location, start, end)` | Median rainfall (mm) of each hour, summed over a period | `total_rainfall("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
+| `rain_outlook(location, start, end)` | Rain in 3-hour blocks, up to 48 hours: chance (%), median (mm) and how much the wettest hour may bring (mm) | `rain_outlook("Zurich", "2026-09-23T12:00", "2026-09-24T00:00")` |
 | `sunshine_hours(location, start, end)` | Sunshine (h) summed over a period | `sunshine_hours("Zurich", "2026-09-23T06:00", "2026-09-23T18:00")` |
 | `precipitation_probability(location, when)` | Chance of rain (%) over the 3 hours up to that time | `precipitation_probability("Zurich", "2026-09-23T14:00")` |
 | `precipitation_rate(location, when)` | Median rainfall (mm) in the hour up to that time | `precipitation_rate("Zurich", "2026-09-23T14:00")` |

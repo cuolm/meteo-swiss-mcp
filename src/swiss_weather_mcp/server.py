@@ -272,6 +272,35 @@ class SwissWeatherMCPServer:
 
         @self.mcp.tool()
         @_handle_tool_call
+        async def rain_outlook(location: str, start: str, end: str) -> dict:
+            """
+            Get when and how much it may rain at a location, in 3-hour blocks over a period.
+
+            Use this for "will it rain this afternoon", "do I need an umbrella" or "when does the
+            rain stop". Each block gives the chance of rain, the median rainfall of the 3 hours, and
+            how much the wettest hour of the block may bring (its 90th percentile). The median is
+            often 0 when showers are possible, so read the chance and the "up to" amount as well.
+
+            Args:
+                location (str): Location name (e.g., "Zurich") or Swiss postal code (e.g., "8001").
+                start (str): Swiss local time the period starts, ISO 8601 without offset, e.g. "2026-09-23T12:00".
+                end (str): Swiss local time the period ends, at most 48 hours after start.
+
+            Returns:
+                dict: The resolved location with its altitude, one row per 3-hour block (from, to,
+                    rain chance in percent, median rainfall and wettest hour's "up to" amount in
+                    millimetres), and the model run.
+
+            Examples:
+                rain_outlook("Zurich", "2026-09-23T12:00", "2026-09-24T00:00")
+                rain_outlook("Lugano", "2026-09-24T06:00", "2026-09-24T18:00")
+            """
+            start_moment = _parse_swiss_time(start)
+            end_moment = _parse_swiss_time(end)
+            return await self.forecast_service.read_rain_outlook(location, start_moment, end_moment)
+
+        @self.mcp.tool()
+        @_handle_tool_call
         async def sunshine_hours(location: str, start: str, end: str) -> dict:
             """
             Get the sunshine hours for a location over a period.
