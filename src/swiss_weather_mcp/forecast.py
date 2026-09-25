@@ -219,14 +219,6 @@ class ForecastService:
         """Read the height of the 0 °C line at a moment."""
         return await self._build_hourly_answer(location, parameters.FREEZING_LEVEL, moment, "m above sea level")
 
-    async def read_precipitation_rate(self, location: str, moment: datetime) -> Dict[str, Any]:
-        """Read the median rainfall in the hour up to a moment."""
-        return await self._build_hourly_answer(location, parameters.PRECIPITATION, moment, "mm/h")
-
-    async def read_precipitation_probability(self, location: str, moment: datetime) -> Dict[str, Any]:
-        """Read the chance of rain over the 3 hours up to a moment."""
-        return await self._build_hourly_answer(location, parameters.PRECIPITATION_PROBABILITY, moment, "%")
-
     async def read_wind_direction(self, location: str, moment: datetime) -> Dict[str, Any]:
         """Read the mean wind direction for the hour up to a moment, in degrees and as a compass point."""
         answer = await self._build_hourly_answer(location, parameters.WIND_DIRECTION, moment, "degrees")
@@ -244,14 +236,6 @@ class ForecastService:
             description, "description", point, series.run_time,
             valid_at=_format_swiss_time(moment), pictogram_code=pictogram_code, weather_emoji=weather_emoji,
         )
-
-    async def read_total_rainfall(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
-        """Add up the median rainfall of each hour over a period."""
-        point = await self._find_point(location)
-        series = await self._read_series(parameters.PRECIPITATION, point)
-        rainfall_mm = self._sum_between(series, start_moment, end_moment, point)
-        return self._build_answer(round(rainfall_mm, 1), "mm", point, series.run_time,
-                            **{"from": _format_swiss_time(start_moment), "to": _format_swiss_time(end_moment)})
 
     async def read_sunshine_hours(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:
         """Add up the sunshine over a period, in hours."""
