@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from . import parameters
 from .meteoswiss import SWISS_TZ, ForecastPoint, ForecastSeries, LocalForecastSource
@@ -67,9 +67,12 @@ def _describe_covered_range(series: ForecastSeries) -> str:
     )
 
 
-def _describe_pictogram(pictogram_code: int) -> str:
-    """Turn a MeteoSwiss pictogram code into the sentence it stands for."""
-    return parameters.PICTOGRAM_DESCRIPTIONS.get(pictogram_code, f"unknown weather code {pictogram_code}")
+def _describe_pictogram(pictogram_code: int) -> Tuple[str, Optional[str]]:
+    """Turn a MeteoSwiss pictogram code into the sentence it stands for and its emoji."""
+    pictogram = parameters.PICTOGRAMS.get(pictogram_code)
+    if pictogram is None:
+        return f"unknown weather code {pictogram_code}", None
+    return pictogram
 
 
 def _find_compass_point(degrees: float) -> str:
@@ -92,7 +95,7 @@ def _build_day(series_by_field: Dict[str, Optional[ForecastSeries]], day: date) 
     # The pictogram is published as a code, which is only useful once it is spelled out
     if day_values["weather"] is not None:
         day_values["pictogram_code"] = int(day_values["weather"])
-        day_values["weather"] = _describe_pictogram(day_values["pictogram_code"])
+        day_values["weather"], day_values["weather_emoji"] = _describe_pictogram(day_values["pictogram_code"])
     return day_values
 
 
@@ -228,10 +231,10 @@ class ForecastService:
         series = await self._read_series(parameters.WEATHER_PICTOGRAM, point)
         pictogram_value = self._read_value_at(series, moment, point, parameters.WEATHER_PICTOGRAM)
         pictogram_code = int(pictogram_value)
-        description = _describe_pictogram(pictogram_code)
+        description, weather_emoji = _describe_pictogram(pictogram_code)
         return self._build_answer(
             description, "description", point, series.run_time,
-            valid_at=_format_swiss_time(moment), pictogram_code=pictogram_code,
+            valid_at=_format_swiss_time(moment), pictogram_code=pictogram_code, weather_emoji=weather_emoji,
         )
 
     async def read_total_rainfall(self, location: str, start_moment: datetime, end_moment: datetime) -> Dict[str, Any]:

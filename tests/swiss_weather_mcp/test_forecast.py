@@ -3,7 +3,8 @@ from datetime import date
 import pytest
 
 from fakes import build_swiss_time
-from swiss_weather_mcp.forecast import _find_compass_point
+from swiss_weather_mcp.forecast import _describe_pictogram, _find_compass_point
+from swiss_weather_mcp.parameters import PICTOGRAMS
 
 
 # --- read_temperature ---
@@ -108,6 +109,7 @@ async def test_read_weather_description(service_fixture):
 
     assert answer["value"] == "mostly sunny, some clouds"
     assert answer["pictogram_code"] == 2
+    assert answer["weather_emoji"] == "🌤️"
 
 
 # --- read_daily_forecast ---
@@ -156,6 +158,19 @@ async def test_read_weather_outlook_invalid_days(service_fixture):
 async def test_read_weather_outlook_outside_the_forecast(service_fixture):
     with pytest.raises(ValueError, match="no daily forecast"):
         await service_fixture.read_weather_outlook("Zurich", date(2026, 10, 30), 3)
+
+
+# --- _describe_pictogram ---
+
+def test_describe_pictogram():
+    assert _describe_pictogram(1) == ("sunny", "☀️")
+    assert _describe_pictogram(101) == ("clear", "✨")
+    assert _describe_pictogram(999) == ("unknown weather code 999", None)
+
+
+def test_describe_pictogram_every_code_has_words_and_an_emoji():
+    for code, (description, emoji) in PICTOGRAMS.items():
+        assert description and emoji, code
 
 
 # --- _find_compass_point ---
