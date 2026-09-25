@@ -260,7 +260,7 @@ class LocalForecastSource:
                 file_urls_by_run = self._fetch_file_urls_by_run(day)
                 complete_run_ids = []
                 for run_id, file_urls in file_urls_by_run.items():
-                    if parameters.ALL_PARAMETERS <= file_urls.keys():
+                    if parameters.ALL_PARAMETERS.issubset(file_urls):
                         complete_run_ids.append(run_id)
                 if complete_run_ids:
                     # Run IDs are fixed width, so the newest run is the largest string
